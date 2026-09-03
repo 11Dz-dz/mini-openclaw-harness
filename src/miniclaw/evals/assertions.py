@@ -13,7 +13,9 @@ def evaluate_assertion(
     elif assertion.kind == "event_sequence_contains":
         actual = [event.payload.__class__.__name__ for event in result.events]
         expected = assertion.expected
-        if not isinstance(expected, list) or not all(item in actual for item in expected):
+        if not isinstance(expected, list) or not all(
+            item in actual for item in expected
+        ):
             return "event sequence does not contain expected event types"
         return None
     else:

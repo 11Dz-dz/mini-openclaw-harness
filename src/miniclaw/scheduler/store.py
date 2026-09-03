@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,9 @@ class SchedulerStore:
         return connection
 
     async def initialize(self) -> None:
+        return await asyncio.to_thread(self._initialize_blocking)
+
+    def _initialize_blocking(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.execute(
@@ -46,6 +50,9 @@ class SchedulerStore:
                 )
 
     async def add(self, task: ScheduledTask) -> None:
+        return await asyncio.to_thread(self._add_blocking, task)
+
+    def _add_blocking(self, task: ScheduledTask) -> None:
         with self._connect() as connection:
             connection.execute(
                 """
@@ -70,6 +77,9 @@ class SchedulerStore:
             )
 
     async def get(self, task_id: str) -> ScheduledTask:
+        return await asyncio.to_thread(self._get_blocking, task_id)
+
+    def _get_blocking(self, task_id: str) -> ScheduledTask:
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT * FROM scheduled_tasks WHERE task_id = ?",
@@ -80,6 +90,9 @@ class SchedulerStore:
         return self._decode(row)
 
     async def list(self) -> tuple[ScheduledTask, ...]:
+        return await asyncio.to_thread(self._list_blocking)
+
+    def _list_blocking(self) -> tuple[ScheduledTask, ...]:
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT * FROM scheduled_tasks ORDER BY run_at, task_id"
@@ -93,6 +106,20 @@ class SchedulerStore:
         *,
         owner: str | None = None,
     ) -> tuple[ScheduledTask, ...]:
+        return await asyncio.to_thread(
+            self._claim_due_blocking, now, limit, owner=owner
+        )
+
+    def _claim_due_blocking(
+        self,
+        now: datetime,
+        limit: int,
+        *,
+        owner: str | None = None,
+    ) -> tuple[ScheduledTask, ...]:
+        # BEGIN IMMEDIATE takes SQLite's write lock before the SELECT, so two
+        # processes polling the same database cannot both claim one task: the
+        # loser blocks, then sees the row already marked running.
         # BEGIN IMMEDIATE takes SQLite's write lock before the SELECT, so two
         # processes polling the same database cannot both claim one task: the
         # loser blocks, then sees the row already marked running.
@@ -173,6 +200,16 @@ class SchedulerStore:
         *,
         completed_child_runs: tuple[str, ...],
     ) -> None:
+        return await asyncio.to_thread(
+            self._recover_running_blocking,
+            completed_child_runs=completed_child_runs,
+        )
+
+    def _recover_running_blocking(
+        self,
+        *,
+        completed_child_runs: tuple[str, ...],
+    ) -> None:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             rows = connection.execute(
@@ -193,6 +230,9 @@ class SchedulerStore:
             connection.commit()
 
     async def cancel(self, task_id: str) -> int:
+        return await asyncio.to_thread(self._cancel_blocking, task_id)
+
+    def _cancel_blocking(self, task_id: str) -> int:
         cancelled = 0
         pending = [task_id]
         with self._connect() as connection:

@@ -6,7 +6,6 @@ import signal
 import sys
 import time
 
-
 _INTERRUPT_PROBE = """
 from pathlib import Path
 

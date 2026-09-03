@@ -26,10 +26,10 @@ def test_config_schema_includes_secret_without_adding_it_to_runtime_defaults() -
 
 
 def test_config_schema_separates_runtime_and_secret_fields() -> None:
-    assert RUNTIME_FIELDS == tuple(
+    assert tuple(
         field for field in CONFIG_FIELDS if field != "api_key"
-    )
-    assert SECRET_FIELDS == frozenset({"api_key"})
+    ) == RUNTIME_FIELDS
+    assert frozenset({"api_key"}) == SECRET_FIELDS
 
 
 def test_default_config_path_uses_current_home(monkeypatch: pytest.MonkeyPatch) -> None:

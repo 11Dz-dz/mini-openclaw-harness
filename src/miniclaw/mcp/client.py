@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import os
 from collections.abc import Mapping, Sequence
@@ -210,10 +211,8 @@ class StdioMcpClient:
     async def aclose(self) -> None:
         if self._reader is not None:
             self._reader.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._reader
-            except asyncio.CancelledError:
-                pass
             self._reader = None
         self._fail_pending(McpServerClosed("MCP client closed"))
         process = self._process

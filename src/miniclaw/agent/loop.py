@@ -25,14 +25,14 @@ from miniclaw.observability.trace import TraceSink
 from miniclaw.permissions.approval import InMemoryApprovalProvider
 from miniclaw.permissions.policy import DefaultPermissionPolicy
 from miniclaw.permissions.types import PermissionDecision, PermissionRequest
-from miniclaw.tools.assembler import ToolCallAssembler
-from miniclaw.tools.executor import ToolExecutor
-from miniclaw.tools.registry import ToolRegistry
-from miniclaw.tools.types import ToolContext
 from miniclaw.sessions.checkpoints import FileCheckpointStore
 from miniclaw.sessions.database import SessionRepository
 from miniclaw.sessions.events import JsonlEventStore
 from miniclaw.sessions.types import Checkpoint, RunRecord, SessionRecord
+from miniclaw.tools.assembler import ToolCallAssembler
+from miniclaw.tools.executor import ToolExecutor
+from miniclaw.tools.registry import ToolRegistry
+from miniclaw.tools.types import ToolContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,9 +237,7 @@ class AgentLoop:
                 if status in {
                     RunStatus.RECORDING_RESULTS,
                     RunStatus.RECORDING_TOOL_ERROR,
-                }:
-                    status = transition(status, RunStatus.BUILDING_CONTEXT)
-                elif status is RunStatus.CREATED:
+                } or status is RunStatus.CREATED:
                     status = transition(status, RunStatus.BUILDING_CONTEXT)
                 request_messages = tuple(messages)
                 selected_extra = extra_sources

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sqlite3
 from pathlib import Path
@@ -33,6 +34,9 @@ class PlanStore:
         return connection
 
     async def initialize(self) -> None:
+        return await asyncio.to_thread(self._initialize_blocking)
+
+    def _initialize_blocking(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript(
@@ -66,6 +70,9 @@ class PlanStore:
             )
 
     async def create(self, plan: Plan) -> None:
+        return await asyncio.to_thread(self._create_blocking, plan)
+
+    def _create_blocking(self, plan: Plan) -> None:
         self.engine.validate(plan)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -101,6 +108,9 @@ class PlanStore:
             connection.commit()
 
     async def get(self, plan_id: str) -> Plan:
+        return await asyncio.to_thread(self._get_blocking, plan_id)
+
+    def _get_blocking(self, plan_id: str) -> Plan:
         with self._connect() as connection:
             plan_row = connection.execute(
                 "SELECT * FROM plans WHERE plan_id = ?",
@@ -119,6 +129,9 @@ class PlanStore:
         )
 
     async def list_todos(self, plan_id: str) -> tuple[Todo, ...]:
+        return await asyncio.to_thread(self._list_todos_blocking, plan_id)
+
+    def _list_todos_blocking(self, plan_id: str) -> tuple[Todo, ...]:
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT * FROM todos WHERE plan_id = ? ORDER BY priority",
@@ -137,6 +150,9 @@ class PlanStore:
         )
 
     async def list_tasks(self) -> tuple[tuple[str, Task], ...]:
+        return await asyncio.to_thread(self._list_tasks_blocking)
+
+    def _list_tasks_blocking(self) -> tuple[tuple[str, Task], ...]:
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT * FROM tasks ORDER BY rowid"

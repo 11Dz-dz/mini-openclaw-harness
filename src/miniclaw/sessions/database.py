@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,6 +31,9 @@ class SessionRepository:
         return connection
 
     async def initialize(self) -> None:
+        return await asyncio.to_thread(self._initialize_blocking)
+
+    def _initialize_blocking(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript(
@@ -73,6 +77,9 @@ class SessionRepository:
             )
 
     async def create_session(self, session: SessionRecord) -> None:
+        return await asyncio.to_thread(self._create_session_blocking, session)
+
+    def _create_session_blocking(self, session: SessionRecord) -> None:
         with self._connect() as connection:
             connection.execute(
                 "INSERT INTO sessions VALUES (?, ?, ?)",
@@ -84,6 +91,9 @@ class SessionRepository:
             )
 
     async def create_run(self, run: RunRecord) -> None:
+        return await asyncio.to_thread(self._create_run_blocking, run)
+
+    def _create_run_blocking(self, run: RunRecord) -> None:
         with self._connect() as connection:
             connection.execute(
                 "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)",
@@ -98,6 +108,9 @@ class SessionRepository:
             )
 
     async def get_run(self, run_id: str) -> RunRecord | None:
+        return await asyncio.to_thread(self._get_run_blocking, run_id)
+
+    def _get_run_blocking(self, run_id: str) -> RunRecord | None:
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT * FROM runs WHERE run_id = ?",
@@ -115,6 +128,9 @@ class SessionRepository:
         )
 
     async def get_session(self, session_id: str) -> SessionRecord | None:
+        return await asyncio.to_thread(self._get_session_blocking, session_id)
+
+    def _get_session_blocking(self, session_id: str) -> SessionRecord | None:
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT * FROM sessions WHERE session_id = ?",
@@ -129,6 +145,11 @@ class SessionRepository:
         )
 
     async def latest_run_for_session(self, session_id: str) -> RunRecord | None:
+        return await asyncio.to_thread(
+            self._latest_run_for_session_blocking, session_id
+        )
+
+    def _latest_run_for_session_blocking(self, session_id: str) -> RunRecord | None:
         with self._connect() as connection:
             row = connection.execute(
                 """
@@ -151,6 +172,11 @@ class SessionRepository:
         )
 
     async def touch_session(self, session_id: str, updated_at: datetime) -> None:
+        return await asyncio.to_thread(
+            self._touch_session_blocking, session_id, updated_at
+        )
+
+    def _touch_session_blocking(self, session_id: str, updated_at: datetime) -> None:
         with self._connect() as connection:
             connection.execute(
                 "UPDATE sessions SET updated_at = ? WHERE session_id = ?",
@@ -158,6 +184,9 @@ class SessionRepository:
             )
 
     async def list_sessions(self) -> tuple[SessionRecord, ...]:
+        return await asyncio.to_thread(self._list_sessions_blocking)
+
+    def _list_sessions_blocking(self) -> tuple[SessionRecord, ...]:
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT * FROM sessions ORDER BY updated_at DESC, session_id"
@@ -172,6 +201,9 @@ class SessionRepository:
         )
 
     async def list_runs(self) -> tuple[RunRecord, ...]:
+        return await asyncio.to_thread(self._list_runs_blocking)
+
+    def _list_runs_blocking(self) -> tuple[RunRecord, ...]:
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT * FROM runs ORDER BY updated_at DESC, run_id"
@@ -189,6 +221,28 @@ class SessionRepository:
         )
 
     async def record_checkpoint(
+        self,
+        *,
+        checkpoint_id: str,
+        run_id: str,
+        sequence: int,
+        path: Path,
+        sha256: str,
+        created_at: datetime,
+        run_status: str,
+    ) -> None:
+        return await asyncio.to_thread(
+            self._record_checkpoint_blocking,
+            checkpoint_id=checkpoint_id,
+            run_id=run_id,
+            sequence=sequence,
+            path=path,
+            sha256=sha256,
+            created_at=created_at,
+            run_status=run_status,
+        )
+
+    def _record_checkpoint_blocking(
         self,
         *,
         checkpoint_id: str,
@@ -220,6 +274,12 @@ class SessionRepository:
         self,
         checkpoint_id: str,
     ) -> CheckpointIndex | None:
+        return await asyncio.to_thread(self._checkpoint_index_blocking, checkpoint_id)
+
+    def _checkpoint_index_blocking(
+        self,
+        checkpoint_id: str,
+    ) -> CheckpointIndex | None:
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT * FROM checkpoints WHERE checkpoint_id = ?",
@@ -228,6 +288,12 @@ class SessionRepository:
         return self._decode_index(row)
 
     async def latest_checkpoint_index(
+        self,
+        run_id: str,
+    ) -> CheckpointIndex | None:
+        return await asyncio.to_thread(self._latest_checkpoint_index_blocking, run_id)
+
+    def _latest_checkpoint_index_blocking(
         self,
         run_id: str,
     ) -> CheckpointIndex | None:

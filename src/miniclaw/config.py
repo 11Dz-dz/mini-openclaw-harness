@@ -1,10 +1,10 @@
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Mapping, Protocol
+from typing import Protocol
 from urllib.parse import urlsplit
-
 
 CONFIG_FIELDS = (
     "data_dir",
@@ -127,7 +127,8 @@ def coerce_config_value(field: str, value: object) -> object:
         normalized = value.strip()
         try:
             parsed = urlsplit(normalized)
-            parsed.port
+            # urlsplit defers port validation until the attribute is read.
+            _ = parsed.port
         except ValueError as error:
             raise ValueError("base_url must include a valid port") from error
         if parsed.scheme not in {"http", "https"}:

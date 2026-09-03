@@ -5,8 +5,14 @@ from typing import get_origin
 
 from miniclaw.context.types import AgentContext, ContextSource
 from miniclaw.core.events import EventEnvelope
-from miniclaw.core.messages import Message, TextContent, ToolCall, ToolResultContent
-from miniclaw.core.messages import TextDelta, ToolCallDelta
+from miniclaw.core.messages import (
+    Message,
+    TextContent,
+    TextDelta,
+    ToolCall,
+    ToolCallDelta,
+    ToolResultContent,
+)
 from miniclaw.sessions.types import Checkpoint
 
 CHECKPOINT_FORMAT_VERSION = 1

@@ -5,7 +5,10 @@ from typing import Literal, Union, get_args, get_origin, get_type_hints
 from miniclaw.core.errors import ToolArgumentsInvalid, ToolSchemaError
 
 
-def _schema_for_annotation(annotation: object, parameter_name: str) -> dict[str, object]:
+def _schema_for_annotation(
+    annotation: object,
+    parameter_name: str,
+) -> dict[str, object]:
     scalar_types: dict[object, str] = {
         str: "string",
         int: "integer",

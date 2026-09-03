@@ -180,13 +180,18 @@ Inspect the git log before writing release notes.
 ## 开发
 
 ```bash
-uv run pytest -q
-uv run python -m miniclaw.evals.cli run tests/fixtures/evals/core.json
-bash scripts/smoke_offline.sh
+uv run ruff check .                                          # lint
+uv run pytest -q                                             # 516 tests
+bash scripts/smoke_offline.sh                                # 完整离线验收
 ```
+
+CI 在 Linux 和 macOS 上跑 lint、测试、离线验收，并从构建出的 wheel 做一次干净安装
+验证——全程不需要 API Key，不产生模型费用。
 
 ## 已知限制
 
+- Token 计数是启发式的（按字符分脚本估算），不是模型自己的 tokenizer；预算偏保守
+- 上下文超预算时按优先级丢弃，没有做摘要压缩
 - `SandboxRouter` 只在启动时选一次后端
 - Trace 始终开启，`/trace on|off` 只返回说明
 - `/apply` 的审批绑定路径列表，未绑定内容摘要

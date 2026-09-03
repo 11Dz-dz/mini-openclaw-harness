@@ -1120,9 +1120,8 @@ def test_first_run_coordination_rejects_unsupported_platform(
     with pytest.raises(
         ConfigPersistenceError,
         match="coordination is unsupported",
-    ):
-        with store.coordinate_first_run():
-            pytest.fail("must not enter coordination")
+    ), store.coordinate_first_run():
+        pytest.fail("must not enter coordination")
 
 
 def test_directory_fsync_failure_reports_replaced_file_without_rollback(

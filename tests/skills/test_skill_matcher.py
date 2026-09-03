@@ -1,5 +1,5 @@
-from miniclaw.skills.matcher import SkillMatcher
 from miniclaw.skills.context import skills_context
+from miniclaw.skills.matcher import SkillMatcher
 from miniclaw.skills.types import Skill
 
 

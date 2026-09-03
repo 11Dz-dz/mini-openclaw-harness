@@ -8,7 +8,13 @@ from miniclaw.core.errors import (
     ModelUnavailableError,
     RateLimitError,
 )
-from miniclaw.core.messages import Message, ModelRequest, ResponseCompleted, TextContent, TextDelta
+from miniclaw.core.messages import (
+    Message,
+    ModelRequest,
+    ResponseCompleted,
+    TextContent,
+    TextDelta,
+)
 from miniclaw.model.openai_compat import OpenAICompatibleClient
 
 
@@ -61,10 +67,12 @@ async def test_client_maps_http_errors(
     transport = httpx.MockTransport(
         lambda request: httpx.Response(status, json={"error": {"message": "safe"}})
     )
+    # Error mapping is the subject here, so retries are switched off.
     client = OpenAICompatibleClient(
         "https://model.invalid/v1",
         "test-key",
         transport=transport,
+        max_attempts=1,
     )
 
     with pytest.raises(error_type) as raised:
@@ -78,10 +86,12 @@ async def test_timeout_maps_to_unavailable() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("timed out", request=request)
 
+    # Timeouts are retryable, so this maps one attempt rather than waiting.
     client = OpenAICompatibleClient(
         "https://model.invalid/v1",
         "test-key",
         transport=httpx.MockTransport(handler),
+        max_attempts=1,
     )
 
     with pytest.raises(ModelUnavailableError, match="timed out"):

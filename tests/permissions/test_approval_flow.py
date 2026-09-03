@@ -1,12 +1,11 @@
-from miniclaw.permissions.approval import InMemoryApprovalProvider
 from miniclaw.agent.loop import AgentLoop, ApprovalRequested, ApprovalResolved
 from miniclaw.core.messages import ResponseCompleted, TextDelta, ToolCallDelta
 from miniclaw.model.scripted import ScriptedModel
+from miniclaw.permissions.approval import InMemoryApprovalProvider
 from miniclaw.permissions.policy import DefaultPermissionPolicy
 from miniclaw.permissions.types import PermissionRequest
 from miniclaw.tools.registry import ToolRegistry
-from miniclaw.tools.types import RiskLevel, ToolCapabilities
-from miniclaw.tools.types import RegisteredTool, ToolSpec
+from miniclaw.tools.types import RegisteredTool, RiskLevel, ToolCapabilities, ToolSpec
 
 
 async def test_approval_is_bound_to_one_request() -> None:

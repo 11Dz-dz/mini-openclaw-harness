@@ -13,7 +13,10 @@ class DefaultPermissionPolicy:
         arguments: Mapping[str, object],
     ) -> PermissionEvaluation:
         secret_keys = {"api_key", "token", "secret", "password"}
-        if any(key.casefold() in secret_keys for key in arguments) and not capabilities.secrets:
+        if (
+            any(key.casefold() in secret_keys for key in arguments)
+            and not capabilities.secrets
+        ):
             return PermissionEvaluation(
                 PermissionDecision.DENY, "undeclared secret request"
             )

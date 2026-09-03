@@ -110,5 +110,8 @@ async def test_file_tool_returns_public_error_for_escape(tmp_path: Path) -> None
 
     tool_result = result.messages[2].content[0]
     assert tool_result.is_error is True
-    assert tool_result.output == "tool execution failed"
+    # The model is told why so it can correct itself, but the resolved
+    # filesystem path never reaches it.
+    assert "escapes the workspace" in tool_result.output
+    assert str(tmp_path) not in tool_result.output
     assert not (tmp_path.parent / "escape").exists()

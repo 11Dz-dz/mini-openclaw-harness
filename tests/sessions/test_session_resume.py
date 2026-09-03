@@ -18,8 +18,8 @@ from miniclaw.sessions.recovery import (
     decide_recovery,
     pending_tool_executions,
 )
-from miniclaw.tools.registry import ToolRegistry
 from miniclaw.tools.builtin.files import make_file_tools
+from miniclaw.tools.registry import ToolRegistry
 
 
 def _turns(*texts: str):

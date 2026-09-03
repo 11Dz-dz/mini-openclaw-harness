@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -29,8 +30,8 @@ from miniclaw.memory.context import MemoryContextProvider
 from miniclaw.memory.store import SqliteMemoryStore
 from miniclaw.model.base import ModelProvider
 from miniclaw.model.openai_compat import OpenAICompatibleClient
-from miniclaw.observability.trace import JsonlTraceSink
 from miniclaw.observability.metrics import metrics_from_events
+from miniclaw.observability.trace import JsonlTraceSink
 from miniclaw.paths import MiniClawPaths
 from miniclaw.permissions.approval import (
     CliApprovalProvider,
@@ -156,10 +157,8 @@ class MiniClawApp:
             return
         self.scheduler_worker = None
         worker.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await worker
-        except asyncio.CancelledError:
-            pass
 
     async def run_prompt(
         self,
@@ -808,8 +807,6 @@ async def create_app(
         if internal_provider is not None:
             close = getattr(internal_provider, "aclose", None)
             if close is not None:
-                try:
+                with contextlib.suppress(BaseException):
                     await close()
-                except BaseException:
-                    pass
         raise

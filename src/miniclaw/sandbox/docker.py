@@ -1,5 +1,5 @@
 import asyncio
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 
 from miniclaw.sandbox.capabilities import SandboxCapabilities, SandboxStrength
 from miniclaw.sandbox.types import (

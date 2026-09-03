@@ -1,3 +1,4 @@
+import contextlib
 import errno
 import inspect
 import os
@@ -6,11 +7,10 @@ import stat
 import threading
 import tomllib
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from types import MappingProxyType
-from typing import Mapping
 
 from miniclaw.config import (
     CONFIG_FIELDS,
@@ -877,10 +877,8 @@ class ConfigStore:
         finally:
             if descriptor >= 0:
                 os.close(descriptor)
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 os.unlink(temporary_name, dir_fd=parent_descriptor)
-            except FileNotFoundError:
-                pass
 
     def _validate_candidate(self, candidate: Mapping[str, object]) -> None:
         merged = default_config_values()

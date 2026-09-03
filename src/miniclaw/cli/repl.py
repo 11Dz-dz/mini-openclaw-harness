@@ -23,11 +23,11 @@ from miniclaw.config import (
     resolve_config,
 )
 from miniclaw.config_store import ConfigStore
-from miniclaw.core.events import EventEnvelope
 from miniclaw.core.errors import (
     ApplicationConfigurationError,
     ModelProtocolError,
 )
+from miniclaw.core.events import EventEnvelope
 from miniclaw.core.messages import (
     Message,
     ModelRequest,

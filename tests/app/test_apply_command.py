@@ -36,7 +36,7 @@ def _write_turn(path: str, content: str):
     return (
         ToolCallDelta(
             0, f"c-{path}", "write_file",
-            '{"path":"%s","content":"%s"}' % (path, content),
+            f'{{"path":"{path}","content":"{content}"}}',
         ),
         ResponseCompleted("tool_calls"),
     )

@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import re
@@ -30,6 +31,9 @@ class SqliteMemoryStore:
         return connection
 
     async def initialize(self) -> None:
+        return await asyncio.to_thread(self._initialize_blocking)
+
+    def _initialize_blocking(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.source_directory.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
@@ -50,6 +54,9 @@ class SqliteMemoryStore:
             )
 
     async def put(self, memory: MemoryRecord) -> None:
+        return await asyncio.to_thread(self._put_blocking, memory)
+
+    def _put_blocking(self, memory: MemoryRecord) -> None:
         if not memory.source_ref:
             raise ValueError("memory source_ref is required")
         with self._connect() as connection:
@@ -99,6 +106,14 @@ class SqliteMemoryStore:
         return memory
 
     async def search(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+    ) -> tuple[MemoryRecord, ...]:
+        return await asyncio.to_thread(self._search_blocking, query, limit=limit)
+
+    def _search_blocking(
         self,
         query: str,
         *,

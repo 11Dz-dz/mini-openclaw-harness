@@ -2,7 +2,6 @@ import re
 import subprocess
 from pathlib import Path
 
-
 SECRET_PATTERNS = (
     re.compile("sk-" + r"[A-Za-z0-9_-]{16,}"),
     re.compile("Bearer " + r"[A-Za-z0-9._-]{16,}"),

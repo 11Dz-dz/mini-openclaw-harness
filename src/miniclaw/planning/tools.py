@@ -21,7 +21,9 @@ def make_planning_tools(store: PlanStore) -> tuple[RegisteredTool, ...]:
             )
             for item in arguments["tasks"]
         )
-        await store.create(Plan(str(arguments["plan_id"]), str(arguments["goal"]), tasks))
+        await store.create(
+            Plan(str(arguments["plan_id"]), str(arguments["goal"]), tasks)
+        )
         return str(arguments["plan_id"])
 
     async def list_tasks(arguments, context: ToolContext) -> str:
