@@ -200,10 +200,6 @@ CI 在 Linux 和 macOS 上跑 lint、测试、离线验收，并从构建出的 
 - Scheduler 的跨进程认领依赖单个 SQLite 文件，不适用于多机部署
 - 没有浏览器自动化：`fetch_url` 抓取静态 HTML 并提取正文，不执行 JavaScript
 
-## 致谢
-
-本项目的基础实现由原作者编写，经授权发布并在其基础上继续开发。
-
 ## License
 
 MIT
