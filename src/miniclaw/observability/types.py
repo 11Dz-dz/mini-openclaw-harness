@@ -17,3 +17,5 @@ class RunMetrics:
     reasoning_tokens: int | None = None
     workspace_verifications: int = 0
     verification_stalls: int = 0
+    reasoning_recovery_requests: int = 0
+    reasoning_recoveries: int = 0

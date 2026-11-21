@@ -7,6 +7,7 @@ import stat
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
@@ -771,6 +772,12 @@ async def create_app(
         internal_provider = provider
         trace_secrets = (api_key,)
 
+    reasoning_circuit_breaker = (
+        config.model in {"deepseek-v4.1-flash", "deepseek-v4.1-flash-1017"}
+        and bool(config.base_url)
+        and urlsplit(config.base_url).hostname == "dashscope.aliyuncs.com"
+    )
+
     trace_secrets += tuple(value for key, value in os.environ.items()
                            if SECRET_KEY.search(key) and len(value) >= 4)
 
@@ -905,6 +912,7 @@ async def create_app(
             trace_sinks=(trace_sink,),
             context_providers=context_providers,
             strip_previous_turn_reasoning=strip_previous_turn_reasoning,
+            reasoning_circuit_breaker=reasoning_circuit_breaker,
         )
         # Scheduled work runs without a human, so it gets its own loop whose
         # approval provider denies anything the policy wants to ask about.
@@ -934,6 +942,7 @@ async def create_app(
             trace_sinks=(trace_sink,),
             context_providers=context_providers,
             strip_previous_turn_reasoning=strip_previous_turn_reasoning,
+            reasoning_circuit_breaker=reasoning_circuit_breaker,
         )
         scheduler_runtime = SchedulerRuntime(
             scheduler,

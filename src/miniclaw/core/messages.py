@@ -43,6 +43,7 @@ class ModelRequest:
     temperature: float = 0.0
     max_output_tokens: int | None = None
     tool_choice: Literal["required"] | None = None
+    enable_thinking: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

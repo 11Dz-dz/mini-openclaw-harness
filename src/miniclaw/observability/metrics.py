@@ -6,6 +6,7 @@ from miniclaw.agent.loop import (
     ModelResponseFinished,
     ModelStreamStarted,
     ModelUsage,
+    ReasoningRecovery,
     RunCompleted,
     RunEnded,
     VerificationStalled,
@@ -27,6 +28,7 @@ def metrics_from_events(events: tuple[EventEnvelope, ...]) -> RunMetrics:
     responses = [event.payload for event in events if isinstance(event.payload, ModelResponseFinished)]
     truncated = [item for item in responses if item.reason == "length"]
     first_ready = next((event.payload.turn for event in events if isinstance(event.payload, ArtifactsReady)), None)
+    recoveries = [event.payload.recovered for event in events if isinstance(event.payload, ReasoningRecovery)]
     return RunMetrics(
         model_requests=requests,
         input_tokens=(sum(item.input_tokens for item in usages) if requests and len(usages) == requests else None),
@@ -51,4 +53,6 @@ def metrics_from_events(events: tuple[EventEnvelope, ...]) -> RunMetrics:
                           and all(item.reasoning_tokens is not None for item in responses) else None),
         workspace_verifications=sum(isinstance(event.payload, WorkspaceVerified) for event in events),
         verification_stalls=sum(isinstance(event.payload, VerificationStalled) for event in events),
+        reasoning_recovery_requests=recoveries.count(False),
+        reasoning_recoveries=recoveries.count(True),
     )

@@ -69,4 +69,6 @@ def encode_request(request: ModelRequest, *, stream: bool) -> dict[str, object]:
         payload['stream_options'] = {'include_usage': True}
     if request.max_output_tokens is not None:
         payload["max_tokens"] = request.max_output_tokens
+    if request.enable_thinking is not None:
+        payload["enable_thinking"] = request.enable_thinking
     return payload

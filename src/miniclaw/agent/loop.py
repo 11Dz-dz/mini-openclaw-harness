@@ -51,6 +51,8 @@ from miniclaw.workspace.paths import WorkspaceEscape, resolve_workspace_path
 
 MAX_TOOL_CALL_CORRECTIONS = 2
 MAX_COMPLETION_CORRECTIONS = 2
+REASONING_SPIN_LIMIT = 2
+REASONING_RECOVERY_TOOLS = {"write_file", "run_command"}
 type CompletionCheck = Callable[[Path], Awaitable[str | None]]
 OUTPUT_TRUNCATION_CORRECTION = ContextSource(
     "model:output-truncation",
@@ -65,6 +67,14 @@ TOOL_CALL_CORRECTION = ContextSource(
     "The previous reply contained an invalid tool call batch. None of its calls ran. "
     "Continue the task by issuing only the calls you still need, with a complete "
     "JSON arguments object for each call.",
+    priority=100,
+    required=True,
+)
+REASONING_RECOVERY = ContextSource(
+    "model:reasoning-recovery",
+    "The output limit was reached repeatedly before a tool call could start. Thinking is temporarily disabled. "
+    "Use one small workspace tool call now to write or run an initial step. Break the task into steps and use runtime "
+    "feedback before attempting the full solution.",
     priority=100,
     required=True,
 )
@@ -100,6 +110,12 @@ class ModelResponseFinished:
 @dataclass(frozen=True, slots=True)
 class ArtifactsReady:
     turn: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReasoningRecovery:
+    turn: int
+    recovered: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +207,18 @@ def _missing_artifacts(workspace: Path, required: tuple[str, ...]) -> tuple[str,
     return tuple(missing)
 
 
+def _recovery_tool_succeeded(call: ToolCall, result: ToolResultContent) -> bool:
+    if call.name not in REASONING_RECOVERY_TOOLS or result.is_error:
+        return False
+    if call.name == "write_file":
+        return True
+    try:
+        output = json.loads(result.output)
+    except ValueError:
+        return False
+    return isinstance(output, dict) and type(output.get("exit_code")) is int and output["exit_code"] == 0
+
+
 class AgentLoop:
     def __init__(
         self,
@@ -212,6 +240,7 @@ class AgentLoop:
         trace_sinks: tuple[TraceSink, ...] = (),
         context_providers: tuple["ContextProvider", ...] = (),
         strip_previous_turn_reasoning: bool = False,
+        reasoning_circuit_breaker: bool = False,
     ) -> None:
         self.provider = provider
         self.model = model
@@ -236,6 +265,7 @@ class AgentLoop:
         self.trace_sinks = trace_sinks
         self.context_providers = context_providers
         self.strip_previous_turn_reasoning = strip_previous_turn_reasoning
+        self.reasoning_circuit_breaker = reasoning_circuit_breaker
 
     async def run(
         self,
@@ -377,6 +407,7 @@ class AgentLoop:
             tool_call_corrections = 0
             completion_corrections = 0
             output_truncation_retries = 0
+            reasoning_spin_streak = 0
             next_feedback: ContextSource | None = None
             workspace = self.workspace or Path.cwd()
             artifacts_ready = not required_artifacts or not _missing_artifacts(workspace, required_artifacts)
@@ -397,11 +428,18 @@ class AgentLoop:
                 tools = registry.specs() if registry else ()
                 tool_choice = "required" if (force_artifact_tool and tools and next_feedback is not None
                                              and next_feedback.source_id == "model:missing-artifacts") else None
+                recovery_tools = (tuple(spec for spec in tools if spec["function"]["name"] in REASONING_RECOVERY_TOOLS)
+                                  if reasoning_spin_streak >= REASONING_SPIN_LIMIT else ())
                 active_feedback = list(completion_feedback)
                 if next_feedback is not None:
                     if not active_feedback or active_feedback[-1] != next_feedback:
                         active_feedback.append(next_feedback)
                     next_feedback = None
+                if recovery_tools:
+                    tools = recovery_tools
+                    tool_choice = "required"
+                    if not active_feedback or active_feedback[-1] != REASONING_RECOVERY:
+                        active_feedback.append(REASONING_RECOVERY)
                 feedback_text = "\n".join(f"- {item.text}" for item in active_feedback[-2:])
                 feedback_message = (Message("user", (TextContent(
                     "[Harness follow-up for the current task]\n" + feedback_text),)) if feedback_text else None)
@@ -415,7 +453,7 @@ class AgentLoop:
                     overhead = self.context_builder.estimator.estimate(json.dumps(
                         encode_request(ModelRequest(
                             self.model, (), tools, max_output_tokens=self.context_budget.reserve_output,
-                            tool_choice=tool_choice), stream=True),
+                            tool_choice=tool_choice, enable_thinking=False if recovery_tools else None), stream=True),
                         ensure_ascii=False, separators=(",", ":")))
                     history = request_messages
                     budget_sources = tuple(replace(source, token_text=json.dumps(encode_message(
@@ -494,11 +532,14 @@ class AgentLoop:
                 await checkpoint()
                 status = transition(status, RunStatus.CALLING_MODEL)
                 await emit(ModelStreamStarted(turn))
+                if recovery_tools:
+                    await emit(ReasoningRecovery(turn, recovered=False))
                 answer: list[str] = []
                 reasoning: list[str] = []
                 assembler = ToolCallAssembler()
                 assembly_error: ToolArgumentsInvalid | None = None
                 finish_reason: str | None = None
+                reasoning_tokens: int | None = None
                 tool_fragments = 0
                 pending_tool_names: set[str] = set()
                 available_tool_names = {spec["function"]["name"] for spec in tools}
@@ -510,6 +551,7 @@ class AgentLoop:
                         max_output_tokens=(self.context_budget.reserve_output
                                            if self.context_budget else None),
                         tool_choice=tool_choice,
+                        enable_thinking=False if recovery_tools else None,
                     )
                 ):
                     if isinstance(event, TextDelta):
@@ -533,14 +575,25 @@ class AgentLoop:
                         finish_reason = event.finish_reason
                         if event.usage is not None:
                             await emit(ModelUsage(event.usage.input_tokens, event.usage.output_tokens))
+                            reasoning_tokens = event.usage.reasoning_tokens
                         await emit(ModelResponseFinished(
                             turn, finish_reason if finish_reason in {"stop", "length", "tool_calls", "content_filter"}
-                            else "other", event.usage.reasoning_tokens if event.usage else None,
+                            else "other", reasoning_tokens,
                             sum(map(len, reasoning)), sum(map(len, answer)), tool_fragments,
                         ))
                         break
+                if self.reasoning_circuit_breaker and not recovery_tools:
+                    if finish_reason == "length" and not tool_fragments and (reasoning or reasoning_tokens):
+                        reasoning_spin_streak += 1
+                    else:
+                        reasoning_spin_streak = 0
                 failure_reason = "model did not complete a usable response"
-                if finish_reason == "stop":
+                if finish_reason == "stop" and recovery_tools:
+                    failure_reason = "reasoning recovery requires a successful workspace tool call"
+                    if turn < self.limits.max_turns and tool_call_corrections < MAX_TOOL_CALL_CORRECTIONS:
+                        tool_call_corrections += 1
+                        next_feedback = REASONING_RECOVERY
+                elif finish_reason == "stop":
                     missing = _missing_artifacts(workspace, required_artifacts)
                     completion_error = None
                     source_id = "model:missing-artifacts"
@@ -607,6 +660,8 @@ class AgentLoop:
                                   for call in assembler.complete())
                     if not calls:
                         raise ToolArgumentsInvalid("model reported tool calls without any calls")
+                    if recovery_tools and any(call.name not in available_tool_names for call in calls):
+                        raise ToolArgumentsInvalid("reasoning recovery only accepts the tools offered for this request")
                 except (ToolArgumentsInvalid, ValueError) as error:
                     if (tool_call_corrections >= MAX_TOOL_CALL_CORRECTIONS
                             or turn >= self.limits.max_turns):
@@ -711,6 +766,7 @@ class AgentLoop:
                     else RunStatus.RECORDING_TOOL_ERROR
                 )
                 status = transition(status, target)
+                recovered = False
                 for call, allowed in decisions:
                     if allowed:
                         result = await executor.execute(call, context)
@@ -721,6 +777,11 @@ class AgentLoop:
                     messages.append(Message("tool", (result,)))
                     completed_tool_executions.append(result.tool_call_id)
                     await checkpoint()
+                    if recovery_tools and _recovery_tool_succeeded(call, result):
+                        recovered = True
+                if recovered:
+                    reasoning_spin_streak = 0
+                    await emit(ReasoningRecovery(turn, recovered=True))
                 if status is RunStatus.EXECUTING_TOOLS:
                     status = transition(status, RunStatus.RECORDING_RESULTS)
                 if not artifacts_ready and not _missing_artifacts(workspace, required_artifacts):

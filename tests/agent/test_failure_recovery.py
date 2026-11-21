@@ -18,6 +18,7 @@ from miniclaw.core.messages import (
     TextDelta,
     ToolCallDelta,
 )
+from miniclaw.model.encoding import encode_request
 from miniclaw.model.scripted import ScriptedModel
 from miniclaw.observability.metrics import metrics_from_events
 from miniclaw.permissions.policy import DefaultPermissionPolicy
@@ -73,6 +74,49 @@ async def test_output_truncation_retry_respects_retry_and_turn_limits(limit, tur
     assert len(model.requests) == calls
     assert 'output token limit' in result.output
     assert [message.role for message in result.messages] == ['user']
+
+
+async def test_reasoning_recovery_suspends_thinking_until_a_tool_succeeds(tmp_path):
+    spin = (ReasoningDelta('private reasoning'), ResponseCompleted('length'))
+    model = ScriptedModel((spin, spin, (ResponseCompleted('stop'),),
+        (ToolCallDelta(0, 'first', 'write_file', '{"path":"../escape","content":"a"}'),
+         ResponseCompleted('tool_calls')),
+        (ToolCallDelta(0, 'write', 'write_file', '{"path":"result.txt","content":"ok"}'),
+         ResponseCompleted('tool_calls')),
+        (TextDelta('done'), ResponseCompleted('stop')),
+    ))
+    app = await create_app(MiniClawConfig(tmp_path / 'data', tmp_path / 'project',
+                           model='deepseek-v4.1-flash', base_url='https://dashscope.aliyuncs.com/compatible-mode/v1'),
+                           provider=model, coding_tools=True)
+    app.agent.permission_policy = None
+    try:
+        result = await app.run_prompt('produce result', required_artifacts=('result.txt',))
+        assert result.status is RunStatus.COMPLETED
+        assert [request.enable_thinking for request in model.requests] == [None, None, False, False, False, None]
+        assert [request.tool_choice for request in model.requests] == [None, None, 'required', 'required', 'required', None]
+        forced = encode_request(model.requests[2], stream=True)
+        assert forced['enable_thinking'] is False and forced['tool_choice'] == 'required'
+        assert 'enable_thinking' not in encode_request(model.requests[-1], stream=True)
+        assert {spec['function']['name'] for spec in forced['tools']} <= {'write_file', 'run_command'}
+        metrics = metrics_from_events(result.events)
+        assert (metrics.reasoning_recovery_requests, metrics.reasoning_recoveries) == (3, 1)
+        assert (app.workspace_session.workspace / 'result.txt').read_text() == 'ok'
+    finally:
+        await app.aclose()
+
+
+async def test_truncated_tool_fragments_break_the_reasoning_spin_streak(tmp_path):
+    spin = (ReasoningDelta('private reasoning'), ResponseCompleted('length'))
+    cut = (ReasoningDelta('long reasoning'), ToolCallDelta(0, 'partial', 'write_file', '{'), ResponseCompleted('length'))
+    model = ScriptedModel((spin, cut, spin, (TextDelta('done'), ResponseCompleted('stop'))))
+    app = await create_app(MiniClawConfig(tmp_path / 'data', tmp_path / 'project'), provider=model)
+    app.agent.reasoning_circuit_breaker = True
+    try:
+        result = await app.run_prompt('check interrupted tool streaming')
+        assert result.status is RunStatus.COMPLETED
+        assert all(request.enable_thinking is None for request in model.requests)
+    finally:
+        await app.aclose()
 
 
 async def test_missing_artifact_continues_with_the_missing_path(tmp_path):
