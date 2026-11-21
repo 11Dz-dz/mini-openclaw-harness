@@ -6,15 +6,23 @@ from pathlib import Path
 
 import pytest
 
-from miniclaw.app import create_app
+from miniclaw.app import _start_mcp_servers, create_app
 from miniclaw.config import MiniClawConfig
+from miniclaw.mcp.client import StdioMcpClient
 from miniclaw.mcp.config import McpConfigError, load_mcp_servers
 from miniclaw.model.fake import FakeModel
+from miniclaw.permissions.types import ApprovalResolution
 from miniclaw.scheduler.store import SchedulerStore
 from miniclaw.scheduler.types import ScheduledTask, ScheduledTaskStatus
+from miniclaw.tools.registry import ToolRegistry
 from miniclaw.web.config import SearchConfigError, load_search_endpoint
 
 SERVER = Path(__file__).parent.parent / "fixtures" / "mcp" / "echo_server.py"
+
+
+class TrustFixtureServer:
+    async def resolve(self, request):
+        return ApprovalResolution(request.request_id, True, "trusted test fixture")
 
 
 async def _app(tmp_path: Path):
@@ -102,48 +110,41 @@ def test_mcp_config_rejects_a_server_without_a_command(tmp_path: Path) -> None:
         load_mcp_servers(tmp_path, user_root=tmp_path / "nowhere")
 
 
-async def test_configured_server_tools_reach_the_registry(tmp_path: Path) -> None:
-    workspace = tmp_path / "project"
-    workspace.mkdir()
-    _write_mcp_config(
-        workspace,
-        {"servers": {"echo": {"command": sys.executable, "args": [str(SERVER), "ok"]}}},
-    )
+async def test_trusted_fixture_server_tools_reach_registry(tmp_path, monkeypatch):
+    _write_mcp_config(tmp_path, {"servers": {"echo": {
+        "command": sys.executable, "args": [str(SERVER), "ok"]}}})
 
-    app = await create_app(
-        MiniClawConfig(tmp_path / "data", workspace), provider=FakeModel([])
-    )
+    async def fixture_launcher(launch, workspace, sandbox):
+        assert workspace == tmp_path / "copy"
+        return StdioMcpClient(launch["command"], launch["args"])
+
+    monkeypatch.setattr('miniclaw.app.isolated_mcp_client', fixture_launcher)
+    tools = ToolRegistry()
+    clients, status = await _start_mcp_servers(
+        tools, tmp_path, execution_workspace=tmp_path / "copy",
+        approval_provider=TrustFixtureServer())
+    process = clients[0]._process
     try:
-        names = {tool.spec.name for tool in app.tools.values()}
-        status = json.loads((await app.handle_command("/mcp")).output)
+        assert tools.get("mcp_echo_echo") is not None
+        assert status[0]["version"] == "1.2.3"
     finally:
-        await app.aclose()
-
-    assert "mcp_echo_echo" in names
-    assert status[0]["status"] == "ready"
-    assert status[0]["version"] == "1.2.3"
+        for client in clients:
+            await client.aclose()
+    assert process.returncode is not None
 
 
-async def test_a_broken_server_does_not_break_startup(tmp_path: Path) -> None:
-    workspace = tmp_path / "project"
-    workspace.mkdir()
-    _write_mcp_config(
-        workspace,
-        {"servers": {"missing": {"command": "/nonexistent/mcp-binary"}}},
-    )
+async def test_unavailable_isolation_never_asks_or_launches(tmp_path):
+    _write_mcp_config(tmp_path, {"servers": {"x": {"command": "untrusted"}}})
 
-    app = await create_app(
-        MiniClawConfig(tmp_path / "data", workspace), provider=FakeModel([])
-    )
-    try:
-        status = json.loads((await app.handle_command("/mcp")).output)
-        # The rest of the agent is fully usable.
-        assert app.tools.get("read_file") is not None
-    finally:
-        await app.aclose()
+    class NeverAsk:
+        async def resolve(self, request):
+            raise AssertionError("cannot grant a missing capability")
 
+    clients, status = await _start_mcp_servers(
+        ToolRegistry(), tmp_path, approval_provider=NeverAsk(),
+        isolation_unavailable="no isolated stdio backend")
+    assert not clients
     assert status[0]["status"] == "unavailable"
-    assert status[0]["tools"] == []
 
 
 async def test_disabled_server_is_not_started(tmp_path: Path) -> None:
@@ -173,23 +174,6 @@ async def test_disabled_server_is_not_started(tmp_path: Path) -> None:
 
     assert status[0]["status"] == "disabled"
     assert not any(name.startswith("mcp_") for name in names)
-
-
-async def test_closing_the_app_stops_mcp_servers(tmp_path: Path) -> None:
-    workspace = tmp_path / "project"
-    workspace.mkdir()
-    _write_mcp_config(
-        workspace,
-        {"servers": {"echo": {"command": sys.executable, "args": [str(SERVER), "ok"]}}},
-    )
-    app = await create_app(
-        MiniClawConfig(tmp_path / "data", workspace), provider=FakeModel([])
-    )
-    process = app.mcp_clients[0]._process
-
-    await app.aclose()
-
-    assert process.returncode is not None
 
 
 # --- cross-process scheduler claim -------------------------------------------

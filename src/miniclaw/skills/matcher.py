@@ -5,7 +5,17 @@ from miniclaw.skills.types import Skill, SkillMatch
 
 
 def _terms(text: str) -> set[str]:
-    return set(re.findall(r"\w+", text.casefold()))
+    cjk = r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]'
+    terms = set(re.findall(r'[a-z0-9_]+', text.casefold()))
+    for run in re.findall(cjk + '+', text):
+        terms.update(run[index:index + 2] for index in range(len(run) - 1))
+    return terms
+
+
+def _trigger_matches(trigger, prompt):
+    if re.search(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]', trigger):
+        return trigger.casefold() in prompt
+    return re.search(rf'(?<!\w){re.escape(trigger.casefold())}(?!\w)', prompt) is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,10 +35,7 @@ class _MatchQuery:
                 trigger_hits = sum(
                     1
                     for trigger in skill.triggers
-                    if re.search(
-                        rf"(?<!\w){re.escape(trigger.casefold())}(?!\w)",
-                        prompt,
-                    )
+                    if _trigger_matches(trigger, prompt)
                 )
                 overlap = len(prompt_terms & _terms(skill.description))
                 score = 20 * trigger_hits + 2 * overlap
@@ -41,7 +48,7 @@ class _MatchQuery:
 
 class SkillMatcher:
     def match(self, prompt: str) -> _MatchQuery:
-        explicit_match = re.fullmatch(r"\s*/skill\s+([a-z][a-z0-9-]{0,63})\s*", prompt)
+        explicit_match = re.match(r"\s*/skill\s+([a-z][a-z0-9-]{0,63})(?=\s|$)", prompt)
         return _MatchQuery(
             prompt,
             explicit_match.group(1) if explicit_match else None,

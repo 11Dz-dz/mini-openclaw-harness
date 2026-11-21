@@ -8,7 +8,8 @@ def snapshot_files(root: Path) -> dict[Path, str]:
         return snapshot
     for path in sorted(root.rglob("*")):
         if path.is_file() and not path.is_symlink():
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            with path.open('rb') as stream:
+                digest = hashlib.file_digest(stream, 'sha256').hexdigest()
             snapshot[path.relative_to(root)] = digest
     return snapshot
 

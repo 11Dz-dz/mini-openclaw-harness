@@ -30,10 +30,14 @@ class ToolCallAssembler:
 
     def complete(self) -> tuple[ToolCall, ...]:
         calls: list[ToolCall] = []
+        seen_ids: set[str] = set()
         for index in sorted(self._buffers):
             buffer = self._buffers[index]
             if buffer.call_id is None or buffer.name is None:
                 raise ToolArgumentsInvalid("incomplete tool call identity")
+            if buffer.call_id in seen_ids:
+                raise ToolArgumentsInvalid("duplicate tool call id")
+            seen_ids.add(buffer.call_id)
             try:
                 arguments = json.loads(buffer.arguments or "{}")
             except json.JSONDecodeError as exc:

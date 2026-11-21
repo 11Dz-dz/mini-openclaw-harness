@@ -6,6 +6,7 @@ class TaskStatus(StrEnum):
     OPEN = "open"
     IN_PROGRESS = "in_progress"
     DONE = "done"
+    REPORTED_DONE = "reported_done"
     FAILED = "failed"
     BLOCKED = "blocked"
     CANCELLED = "cancelled"

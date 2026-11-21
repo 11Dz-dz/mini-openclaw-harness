@@ -1,4 +1,5 @@
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -17,6 +18,7 @@ class McpServerConfig:
     env: dict[str, str] = field(default_factory=dict)
     enabled: bool = True
     timeout: float = 30.0
+    source: str = ""
 
 
 def _parse(payload: object, source: Path) -> tuple[McpServerConfig, ...]:
@@ -45,14 +47,22 @@ def _parse(payload: object, source: Path) -> tuple[McpServerConfig, ...]:
             for key, value in raw_env.items()
         ):
             raise McpConfigError(f"{source}: server '{name}' env must be strings")
+        enabled = entry.get("enabled", True)
+        timeout = entry.get("timeout", 30.0)
+        if not isinstance(enabled, bool):
+            raise McpConfigError(f"{source}: enabled must be a boolean")
+        if (isinstance(timeout, bool) or not isinstance(timeout, (int, float))
+                or not math.isfinite(timeout) or timeout <= 0):
+            raise McpConfigError(f"{source}: timeout must be finite and positive")
         parsed.append(
             McpServerConfig(
                 name,
                 command,
                 tuple(raw_args),
                 dict(raw_env),
-                bool(entry.get("enabled", True)),
-                float(entry.get("timeout", 30.0)),
+                enabled,
+                float(timeout),
+                str(source.resolve()),
             )
         )
     return tuple(parsed)

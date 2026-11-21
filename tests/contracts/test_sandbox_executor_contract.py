@@ -1,8 +1,10 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 from miniclaw.sandbox.process import ProcessSandbox
-from miniclaw.sandbox.types import Command, SandboxPolicy
+from miniclaw.sandbox.types import Command, SandboxCapabilityError, SandboxPolicy
 
 
 async def assert_executor_contract(executor, tmp_path: Path) -> None:
@@ -17,4 +19,7 @@ async def assert_executor_contract(executor, tmp_path: Path) -> None:
 
 
 async def test_process_sandbox_contract(tmp_path: Path) -> None:
-    await assert_executor_contract(ProcessSandbox(), tmp_path)
+    executor = ProcessSandbox()
+    assert not (await executor.capabilities()).available
+    with pytest.raises(SandboxCapabilityError, match="isolation"):
+        await assert_executor_contract(executor, tmp_path)

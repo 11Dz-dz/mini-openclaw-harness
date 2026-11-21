@@ -8,6 +8,22 @@ Evals 全部由仓库代码实现。运行时依赖只有 `httpx` 一个。
 
 要求 Python 3.12+。测试、Evals 和示例完全离线，不需要 API Key。
 
+**命令执行需要可用的隔离后端。** 普通进程后端不提供文件系统和网络隔离，现已拒绝执行。
+Docker 后端不可用时，应用以 `restricted` 模式启动，保留副本内文件工具，但不向模型提供
+`run_command` 和 Git 子进程工具；旧会话中的此类调用也会被拒绝，审批不能解除限制。
+`/sandbox` 显示实际选中的后端、禁用的工具及原因。
+设置 `--require-strong-sandbox` 时，没有隔离后端会直接拒绝启动。
+个人可信项目可显式使用 `--execution-mode trusted`，以普通用户在本机执行 Shell/Git。
+该模式没有文件系统或网络沙箱，每次命令都需要审批；默认不会启用，也不会自动回退到它。
+root 运行时需预先配置专用 `miniclaw-runner` 用户；详细边界及用法见 [可信本机执行](docs/trusted-execution.md)。
+DeepSeek 的配置及思考模式工具调用说明见 [DeepSeek 接入](docs/deepseek.md)。
+MCP 同样要求隔离后端，且启动前需要一次性信任审批；没有 Docker 时不启动 MCP。
+
+Git 只读检查使用原始差异，关闭 external diff、textconv、fsmonitor、签名验签程序和
+隐式远程对象获取，不递归检查子模块，也不刷新磁盘索引。
+若仓库配置了 clean/smudge/process 内容过滤器，工作区状态与差异检查会明确拒绝执行，
+以免 Git 在读取工作区文件时启动过滤程序。该限制独立于隔离后端；没有隔离后端时 Git 工具仍保持禁用。
+
 ```
 you> 看一下这个项目的测试覆盖，把没测到的模块列出来
 you> 给 utils.py 补类型注解，然后跑测试确认没坏
@@ -28,10 +44,12 @@ ALLOW / ASK / DENY。只读检查类工具自动放行，写入和网络访问�
 除非事先显式预授权某个工具。
 
 **全程可审计。** 每个事件（模型输出、工具调用、审批结果、上下文注入）都进结构化
-事件流并写入 trace，密钥自动脱敏。
+事件流并写入 trace。审计日志保存事件类型、顺序和执行元数据，省略提示词、回答正文及流式参数正文。
+恢复检查点保存会话内容，对已知凭据和带凭据标识的文本脱敏，并使用仅所有者可读写的文件权限。
 
 **状态可恢复。** Session、Checkpoint、Plan、Memory 全部持久化；进程重启后
-`/resume` 能接着上次继续，未完成的非幂等工具调用会要求人工确认再重放。
+`/resume` 能接着上次继续。未完成的非幂等调用需要确认是否恢复历史；缺失结果会标记为
+“执行结果未知”，不会自动重放。恢复后应先检查实际状态，避免重复副作用。
 
 ## 架构
 
@@ -112,7 +130,7 @@ miniclaw
 | 版本控制 | `git_status` `git_log` `git_diff` `git_show`（只读，自动放行） |
 | 网络 | `fetch_url`（含 SSRF 防护） `web_search`（需配置端点） |
 | 记忆 | `remember` `search_memory` |
-| 计划 | `create_plan` `list_tasks` `start_task` `complete_task` `fail_task` |
+| 计划 | `create_plan` `list_tasks` `start_task` `complete_task` `verify_task` `fail_task` |
 | 并发 | `delegate_task` |
 | 调度 | `schedule_task` `list_scheduled_tasks` `cancel_scheduled_task` |
 | 扩展 | 任意 MCP 服务器提供的工具 |
@@ -127,8 +145,8 @@ miniclaw
 {
   "servers": {
     "files": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+      "command": "python",
+      "args": [".miniclaw/servers/files.py"]
     }
   }
 }
@@ -136,6 +154,11 @@ miniclaw
 
 MCP 工具统一命名为 `mcp_<服务器>_<工具>`，不会覆盖内置工具；服务器启动失败只影响该
 服务器，不影响 Agent 启动。用 `/mcp` 查看状态。
+
+MCP 在配置的 Docker 镜像内启动，工作目录为 `/workspace`，只挂载工作副本，网络关闭，
+根文件系统只读。可执行程序必须已在镜像内，或脚本位于副本内；不会联网安装依赖。
+配置中的绝对服务器路径必须是容器内路径。审批绑定启动配置指纹，每次启动单独审批；
+环境变量值及敏感参数在预览中脱敏。无隔离后端时直接显示 unavailable，不请求无效审批。
 
 **网页搜索** —— `search.json`，厂商无关，字段映射写在配置里：
 
@@ -181,21 +204,60 @@ Inspect the git log before writing release notes.
 
 ```bash
 uv run ruff check .                                          # lint
-uv run pytest -q                                             # 516 tests
+uv run pytest -q                                             # 完整回归测试
 bash scripts/smoke_offline.sh                                # 完整离线验收
 ```
 
 CI 在 Linux 和 macOS 上跑 lint、测试、离线验收，并从构建出的 wheel 做一次干净安装
 验证——全程不需要 API Key，不产生模型费用。
 
+## 当前服务器环境
+
+```bash
+source /opt/conda/etc/profile.d/conda.sh
+conda activate harness
+cd /root/rivermind-data/mini-openclaw-harness
+python -m pytest -q
+python examples/full_agent_flow.py --fake
+```
+
+该服务器本身是容器，没有可用的 Docker CLI/daemon，采用 restricted 模式。
+文件、计划、记忆和受控网页抓取可用，Shell/Git/MCP 进程执行不可用。
+`data_dir` 与项目目录必须互不包含；不要把运行数据目录设置在项目内部。
+工作副本复制跳过 `.venv`、`node_modules` 和缓存目录，上限为 20,000 文件、512 MiB 总量、
+64 MiB 单文件、64 层目录。超限会明确拒绝。单次 `read_file` 限制为 1 MiB。
+
+## 持久状态与操作约定
+
+- `/apply` 审批会显示目的目录、操作类型及文件状态指纹。审批期间文件或目标变化会拒绝。
+  失败回滚的日志和原文件保存在当前 sandbox 的 `artifacts/apply-*`。回滚不完整时返回备份路径。
+- `remember` 的 `source_ref` 使用 `request` 或 `file:<工作区相对路径>`，程序读取并保存真实来源。
+  来源最多 64 KiB，内容由 SHA256 关联；凭据会被拒绝。旧数据库中未验证来源的记忆保留但不注入。
+  可信程序导入旧记忆可显式使用 `store.put(record, confirmed=True)`；模型工具没有此绕过参数。
+  内容哈希证明来源内容没有变化，不证明模型对该来源的解释正确。
+- 计划任务的文字完成声明为 `reported_done`。`done` 要求该任务处于活动状态时，本轮工具成功执行
+  生成的 `execution:` 记录；`verify_task` 用于核对报告。执行记录证明操作发生，不自动证明目标达成。
+- 定时任务绑定源项目的绝对目录。旧任务没有项目归属时隔离保留，`/jobs` 显示数量。
+  新任务必须带时区，数据库按 UTC 时间戳判断到期；租约/心跳和执行轮次用于防止误恢复和迟到覆盖。
+  `/cancel` 会取消本进程正在运行的任务，其他 worker 最迟在下一次状态检查后停止合作式执行。
+- `/skills errors` 查看损坏技能；`/skill <名称> [任务]` 明确选用；`//` 开头可把斜杠消息当普通文本。
+  自动匹配仍是可解释的触发词和词项匹配，增加了中日韩连续文本匹配，未宣称语义检索准确率。
+- Evals 支持九类断言，工具、审批、checkpoint、trace 来自真实离线运行。
+  已实现断连、工具异常、工具超时、工作区越界故障；其他故障类型明确拒绝，配置的故障没有触发也失败。
+- 会话恢复以 Checkpoint 为权威；`messages` SQLite 表暂为保留结构，不与 Checkpoint 双写。
+  审计日志省略正文不是历史丢失。Checkpoint 是有访问权限限制的本地会话存档，不是加密存储。
+- 同轮工具维持顺序执行，且每个结果写入 checkpoint 后再执行下一工具，避免依赖错误和扩大重放窗口。
+
+逐项修复与验证见 [docs/repair-record.md](docs/repair-record.md)。
+
 ## 已知限制
 
 - Token 计数是启发式的（按字符分脚本估算），不是模型自己的 tokenizer；预算偏保守
-- 上下文超预算时按优先级丢弃，没有做摘要压缩
-- `SandboxRouter` 只在启动时选一次后端
+- 最新请求、系统指令和当前工具消息组必须保留；旧轮次按组裁剪，有余量时加入带来源索引的原文摘录。摘录不保证覆盖所有历史事实
+- `SandboxRouter` 只在启动时选一次后端；Docker 执行前会再次检查能力，不回退到普通进程
 - Trace 始终开启，`/trace on|off` 只返回说明
-- `/apply` 的审批绑定路径列表，未绑定内容摘要
-- Child Agent 与父共享同一 Provider 与 Sandbox，是权限隔离而非进程隔离
+- `/apply` 绑定新增/修改/删除操作及内容和权限，冲突会拒绝；多文件写入有备份和回滚日志，但不具备跨文件系统的瞬时原子性
+- Child Agent 共享 Provider 和副本，只允许检查；写文件和 MCP 工具会禁用，避免子任务修改父任务文件
 - MCP 只实现 stdio 传输，没有 HTTP/SSE，也没有 resources/prompts
 - Scheduler 的跨进程认领依赖单个 SQLite 文件，不适用于多机部署
 - 没有浏览器自动化：`fetch_url` 抓取静态 HTML 并提取正文，不执行 JavaScript

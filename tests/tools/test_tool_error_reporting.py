@@ -87,7 +87,7 @@ async def test_whitespace_in_a_reason_is_collapsed(tmp_path: Path) -> None:
     assert "first line second line" in result.output
 
 
-async def test_operator_still_gets_the_traceback(
+async def test_operator_gets_error_type_and_run_without_sensitive_details(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -97,7 +97,9 @@ async def test_operator_still_gets_the_traceback(
     with caplog.at_level(logging.ERROR, logger="miniclaw.tools.executor"):
         await _run(handler, tmp_path)
 
-    assert "cannot read" in caplog.text
+    assert "OSError" in caplog.text
+    assert "cannot read" not in caplog.text
+    assert ".ssh/id_rsa" not in caplog.text
     assert "run-1" in caplog.text
 
 

@@ -22,8 +22,8 @@ async def test_search_orders_by_score_then_recency(tmp_path: Path) -> None:
         ("python",),
         "2026-07-26T00:00:00+00:00",
     )
-    await store.put(older)
-    await store.put(newer)
+    await store.put(older, confirmed=True)
+    await store.put(newer, confirmed=True)
 
     assert await store.search("python") == (newer, older)
 
@@ -55,7 +55,7 @@ async def test_memory_context_preserves_provenance(tmp_path: Path) -> None:
             ("python",),
             "2026-07-26T00:00:00+00:00",
         )
-    )
+    , confirmed=True)
 
     source = await MemoryContextSource(store, limit=3).build("python")
 

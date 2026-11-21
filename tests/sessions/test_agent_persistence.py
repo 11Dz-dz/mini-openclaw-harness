@@ -29,4 +29,6 @@ async def test_agent_persists_events_and_final_checkpoint(tmp_path: Path) -> Non
     assert stored is not None
     assert stored.status == "completed"
     assert stored.messages == result.messages
-    assert await events.load() == result.events
+    persisted = await events.load()
+    assert [e.event_id for e in persisted] == [e.event_id for e in result.events]
+    assert persisted[0].payload.prompt == '<omitted>'

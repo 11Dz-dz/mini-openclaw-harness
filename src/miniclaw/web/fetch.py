@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from urllib.parse import urljoin
 
@@ -34,34 +35,54 @@ class WebFetcher:
         timeout: float = 15.0,
         max_bytes: int = 512 * 1024,
     ) -> None:
+        if max_bytes <= 0:
+            raise ValueError("max_bytes must be positive")
         self.guard = guard or UrlGuard()
         self.max_bytes = max_bytes
         self._client = httpx.AsyncClient(
             timeout=timeout,
             transport=transport,
             follow_redirects=False,
-            headers={"User-Agent": USER_AGENT, "Accept": "text/html,text/*"},
+            trust_env=False,
+            # Pools key connections by IP after pinning. Avoid sharing a TLS
+            # connection between distinct hostnames on the same address.
+            limits=httpx.Limits(max_keepalive_connections=0),
+            headers={"User-Agent": USER_AGENT, "Accept": "text/html,text/*",
+                     "Accept-Encoding": "identity"},
         )
 
     async def fetch(self, url: str) -> FetchedPage:
         current = url
         for _ in range(MAX_REDIRECTS + 1):
-            self.guard.check(current)
+            addresses = await asyncio.to_thread(self.guard.check, current)
+            original = httpx.URL(current)
+            pinned = original.copy_with(host=addresses[0])
             try:
-                response = await self._client.get(current)
+                async with self._client.stream("GET",
+                    pinned, headers={"Host": original.netloc.decode('ascii')},
+                    extensions={"sni_hostname": original.host},
+                ) as response:
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if not location:
+                            raise FetchError("redirect without a location header")
+                        current = urljoin(current, location)
+                        continue
+                    if response.headers.get('content-encoding', 'identity').lower() != 'identity':
+                        raise FetchError("compressed responses are not accepted")
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=min(65536, self.max_bytes + 1)):
+                        remaining = self.max_bytes + 1 - len(body)
+                        body.extend(chunk[:remaining])
+                        if len(body) > self.max_bytes:
+                            break
+                    limited = httpx.Response(response.status_code, headers=response.headers,
+                                             content=bytes(body))
+                    return self._decode(current, limited)
             except httpx.TimeoutException as error:
                 raise FetchError("request timed out") from error
             except httpx.HTTPError as error:
                 raise FetchError(f"request failed: {type(error).__name__}") from error
-            if response.is_redirect:
-                location = response.headers.get("location")
-                if not location:
-                    raise FetchError("redirect without a location header")
-                # Re-check the next hop: a redirect is an attacker-controlled
-                # way to reach an address the first URL was screened for.
-                current = urljoin(current, location)
-                continue
-            return self._decode(current, response)
         raise FetchError("too many redirects")
 
     def _decode(self, url: str, response: httpx.Response) -> FetchedPage:

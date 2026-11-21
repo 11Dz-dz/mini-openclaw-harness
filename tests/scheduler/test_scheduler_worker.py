@@ -138,6 +138,7 @@ async def test_task_left_running_by_a_crash_is_requeued_at_startup(
             "job-orphan",
             "interrupted",
             datetime.now(UTC) + timedelta(hours=1),
+            max_attempts=2,
         )
     )
     # Simulate a process that died while the task was in flight.
@@ -172,7 +173,15 @@ async def test_unattended_runs_deny_instead_of_prompting() -> None:
     assert "unattended" in resolution.reason
 
 
-async def test_scheduled_run_cannot_escalate_via_approval(tmp_path: Path) -> None:
+async def test_scheduled_run_cannot_escalate_via_approval(tmp_path: Path, monkeypatch) -> None:
+    # Keep this test focused on unattended approval when execution is available.
+    # The no-backend path is covered by test_execution_boundary separately.
+    from miniclaw.sandbox.capabilities import SandboxCapabilities, SandboxStrength
+
+    async def available(self):
+        return SandboxCapabilities(True, SandboxStrength.STRONG, True, True, True, "test backend")
+
+    monkeypatch.setattr("miniclaw.app.DockerSandbox.capabilities", available)
     workspace = tmp_path / "project"
     workspace.mkdir()
     app = await create_app(

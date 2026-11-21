@@ -21,3 +21,12 @@ def test_assembler_rejects_conflicting_identity() -> None:
 
     with pytest.raises(ToolArgumentsInvalid, match="conflicting"):
         assembler.feed(ToolCallDelta(0, "call-2", "read_file", ""))
+
+
+def test_assembler_rejects_duplicate_id_across_indices() -> None:
+    assembler = ToolCallAssembler()
+    assembler.feed(ToolCallDelta(0, "same", "read_file", "{}"))
+    assembler.feed(ToolCallDelta(1, "same", "write_file", "{}"))
+
+    with pytest.raises(ToolArgumentsInvalid, match="duplicate"):
+        assembler.complete()

@@ -26,6 +26,7 @@ ALLOWED_TRANSITIONS = {
         RunStatus.CANCELLED,
     },
     RunStatus.CALLING_MODEL: {
+        RunStatus.BUILDING_CONTEXT,
         RunStatus.COMPLETED,
         RunStatus.VALIDATING_TOOLS,
         RunStatus.FAILED,

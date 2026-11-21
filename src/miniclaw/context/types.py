@@ -21,6 +21,8 @@ class ContextSource:
     text: str
     priority: int
     required: bool = False
+    token_text: str | None = None
+    group_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -80,7 +80,7 @@ async def test_injection_is_recorded_as_an_auditable_event() -> None:
         for event in result.events
         if isinstance(event.payload, ContextInjected)
     ]
-    assert injected == [ContextInjected(("skills",))]
+    assert injected == [ContextInjected(("skills:project:release-notes-writer:release-notes-writer",))]
 
 
 async def test_blank_context_sources_are_not_injected() -> None:

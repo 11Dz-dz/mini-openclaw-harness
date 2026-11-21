@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -17,6 +18,18 @@ RUNTIME_PARTS = {
 
 
 def repository_files() -> tuple[Path, ...]:
+    if not Path('.git').exists():
+        # Release archives and this server's source copy have no Git metadata.
+        # Walk the source tree directly without manufacturing a Git checkout.
+        excluded = {'.git', '.venv', 'node_modules', '__pycache__', '.pytest_cache',
+                    '.ruff_cache', 'build', 'dist', '.loopx', '.worktrees'}
+        files = []
+        for current, directories, names in os.walk('.'):
+            directories[:] = [name for name in directories if name not in excluded
+                               and not (Path(current) / name).is_symlink()]
+            files.extend(Path(current) / name for name in names
+                         if not (Path(current) / name).is_symlink())
+        return tuple(sorted(files))
     output = subprocess.check_output(
         ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
     )

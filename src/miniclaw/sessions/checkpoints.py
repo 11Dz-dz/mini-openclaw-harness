@@ -4,6 +4,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
+from miniclaw.observability.redaction import Redactor
 from miniclaw.sessions.database import SessionRepository
 from miniclaw.sessions.serialization import (
     PersistenceError,
@@ -26,21 +27,32 @@ class FileCheckpointStore:
         self,
         checkpoint_directory: Path,
         repository: SessionRepository,
+        *,
+        secrets: tuple[str, ...] = (),
     ) -> None:
         self.checkpoint_directory = checkpoint_directory
         self.repository = repository
+        self.redactor = Redactor(secrets, truncate=False)
 
     async def save(self, checkpoint: Checkpoint) -> Path:
-        self.checkpoint_directory.mkdir(parents=True, exist_ok=True)
+        self.checkpoint_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        payload = encode_checkpoint(checkpoint)
+        if payload['context_snapshot']:
+            # A checkpoint needs IDs and accounting; duplicating full context
+            # unnecessarily retains prompts and tool outputs a second time.
+            for item in payload['context_snapshot']['items']:
+                item['text'] = '<context text omitted>'
         data = json.dumps(
-            encode_checkpoint(checkpoint),
+            self.redactor.redact(payload),
             separators=(",", ":"),
             sort_keys=True,
         ).encode()
         digest = hashlib.sha256(data).hexdigest()
         path = self.checkpoint_directory / f"{checkpoint.checkpoint_id}.json"
         temporary = path.with_suffix(".json.tmp")
-        with temporary.open("wb") as file:
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.chmod(temporary, 0o600)
+        with os.fdopen(descriptor, "wb") as file:
             file.write(data)
             file.flush()
             os.fsync(file.fileno())

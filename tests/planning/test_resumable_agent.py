@@ -9,7 +9,7 @@ from miniclaw.sessions.database import SessionRepository
 from miniclaw.sessions.types import Checkpoint, RunRecord, SessionRecord
 
 
-async def test_completed_edit_is_not_repeated_after_restart(tmp_path: Path) -> None:
+async def test_completed_edit_is_not_repeated_after_restart(tmp_path: Path, actual_execution) -> None:
     now = datetime(2026, 7, 26, tzinfo=UTC)
     repository = SessionRepository(tmp_path / "state.db")
     await repository.initialize()
@@ -32,7 +32,8 @@ async def test_completed_edit_is_not_repeated_after_restart(tmp_path: Path) -> N
         )
     )
     await store.transition("plan-1", "inspect", TaskStatus.IN_PROGRESS)
-    await store.transition("plan-1", "inspect", TaskStatus.DONE)
+    await store.transition("plan-1", "inspect", TaskStatus.DONE,
+                           evidence=(await actual_execution(store),))
     await store.transition("plan-1", "edit", TaskStatus.IN_PROGRESS)
     calls = 0
 
@@ -58,7 +59,7 @@ async def test_completed_edit_is_not_repeated_after_restart(tmp_path: Path) -> N
         "plan-1",
         "edit",
         TaskStatus.DONE,
-        evidence=("edit-execution",),
+        evidence=(await actual_execution(store),),
     )
 
     recovered = await checkpoints.latest_for_run("run-1")
@@ -69,7 +70,7 @@ async def test_completed_edit_is_not_repeated_after_restart(tmp_path: Path) -> N
         "plan-1",
         "verify",
         TaskStatus.DONE,
-        evidence=("tests passed",),
+        evidence=(await actual_execution(store),),
     )
 
     assert calls == 1

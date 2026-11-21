@@ -10,6 +10,12 @@ from miniclaw.core.messages import (
 
 
 def encode_message(message: Message) -> dict[str, object]:
+    texts = [item.text for item in message.content if isinstance(item, TextContent)]
+    assistant_metadata = {}
+    if message.reasoning_content is not None:
+        if message.role != "assistant" or not isinstance(message.reasoning_content, str):
+            raise ValueError("reasoning content must be assistant protocol state")
+        assistant_metadata["reasoning_content"] = message.reasoning_content
     tool_calls = [item for item in message.content if isinstance(item, ToolCall)]
     tool_results = [
         item for item in message.content if isinstance(item, ToolResultContent)
@@ -17,6 +23,8 @@ def encode_message(message: Message) -> dict[str, object]:
     if tool_calls:
         return {
             "role": message.role,
+            **({"content": "".join(texts)} if texts or assistant_metadata else {}),
+            **assistant_metadata,
             "tool_calls": [
                 {
                     "id": call.id,
@@ -40,10 +48,10 @@ def encode_message(message: Message) -> dict[str, object]:
         return {
             "role": "tool",
             "tool_call_id": result.tool_call_id,
-            "content": result.output,
+            "content": (result.output + f"\n[execution evidence: {result.execution_id}]"
+                        if result.execution_id else result.output),
         }
-    texts = [item.text for item in message.content if isinstance(item, TextContent)]
-    return {"role": message.role, "content": "".join(texts)}
+    return {"role": message.role, "content": "".join(texts), **assistant_metadata}
 
 
 def encode_request(request: ModelRequest, *, stream: bool) -> dict[str, object]:
@@ -55,4 +63,8 @@ def encode_request(request: ModelRequest, *, stream: bool) -> dict[str, object]:
     }
     if request.tools:
         payload["tools"] = list(request.tools)
+    if stream:
+        payload['stream_options'] = {'include_usage': True}
+    if request.max_output_tokens is not None:
+        payload["max_tokens"] = request.max_output_tokens
     return payload

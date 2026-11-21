@@ -5,9 +5,11 @@ from miniclaw.web.fetch import WebFetcher
 from miniclaw.web.search import HttpSearchProvider, SearchEndpoint
 
 
-def make_local_inspection_tools(sandbox) -> tuple[RegisteredTool, ...]:
+def make_local_inspection_tools(
+    sandbox, *, trusted: bool = False, mounts: tuple[str, ...] = (),
+) -> tuple[RegisteredTool, ...]:
     """Read-only tools that never leave the machine."""
-    return make_git_tools(sandbox)
+    return make_git_tools(sandbox, trusted=trusted, mounts=mounts)
 
 
 def make_web_tools(

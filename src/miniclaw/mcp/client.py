@@ -104,11 +104,8 @@ class StdioMcpClient:
             # arguments against it, so anything unusable is replaced rather
             # than trusted.
             if not isinstance(schema, dict) or schema.get("type") != "object":
-                schema = {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": True,
-                }
+                # Never turn an unusable server constraint into an open schema.
+                continue
             annotations = row.get("annotations")
             tools.append(
                 McpTool(

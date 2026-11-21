@@ -203,6 +203,13 @@ class SessionRepository:
     async def list_runs(self) -> tuple[RunRecord, ...]:
         return await asyncio.to_thread(self._list_runs_blocking)
 
+    async def set_run_status(self, run_id: str, status: str) -> None:
+        def update():
+            with self._connect() as connection:
+                connection.execute('UPDATE runs SET status = ?, updated_at = ? WHERE run_id = ?',
+                                   (status, datetime.now(UTC).isoformat(), run_id))
+        await asyncio.to_thread(update)
+
     def _list_runs_blocking(self) -> tuple[RunRecord, ...]:
         with self._connect() as connection:
             rows = connection.execute(

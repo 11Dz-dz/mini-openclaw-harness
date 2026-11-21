@@ -7,6 +7,7 @@ from collections.abc import Callable, Coroutine, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from miniclaw.agent.state import RunStatus
 from miniclaw.cli.config import ReplConfig
 from miniclaw.cli.config_commands import (
     add_config_subcommands,
@@ -31,6 +32,7 @@ from miniclaw.core.events import EventEnvelope
 from miniclaw.core.messages import (
     Message,
     ModelRequest,
+    ReasoningDelta,
     ResponseCompleted,
     TextContent,
     TextDelta,
@@ -63,6 +65,7 @@ class Repl:
         previous_length = len(self.messages)
         self.messages.append(Message("user", (TextContent(text),)))
         answer: list[str] = []
+        reasoning: list[str] = []
         completed = False
         request = ModelRequest(self.model, tuple(self.messages))
         try:
@@ -70,6 +73,8 @@ class Repl:
                 if isinstance(event, TextDelta):
                     answer.append(event.text)
                     self.write(event.text)
+                elif isinstance(event, ReasoningDelta):
+                    reasoning.append(event.text)
                 elif isinstance(event, ResponseCompleted):
                     completed = True
                     break
@@ -79,7 +84,8 @@ class Repl:
         if not completed:
             del self.messages[previous_length:]
             raise ModelProtocolError("model stream ended without completion")
-        self.messages.append(Message("assistant", (TextContent("".join(answer)),)))
+        self.messages.append(Message("assistant", (TextContent("".join(answer)),),
+                                     "".join(reasoning) if reasoning else None))
 
     def handle_command(self, text: str) -> bool:
         if text == "/clear":
@@ -103,15 +109,25 @@ class AppRepl:
         )
 
     async def process(self, text: str) -> bool:
-        command = await self.app.handle_command(text)
+        if text.startswith('//'):
+            text = text[1:]
+            from miniclaw.cli.commands import CommandResult
+            command = CommandResult(False)
+        else:
+            command = await self.app.handle_command(text)
         if command.handled:
             if command.output:
                 self.write(command.output)
             return command.exit_requested
-        await self.app.run_prompt(
-            text,
-            trace_sinks=(_TextStreamSink(self.write_stream),),
-        )
+        try:
+            result = await self.app.run_prompt(
+                text, trace_sinks=(_TextStreamSink(self.write_stream),),
+            )
+        except Exception as error:
+            self.write(f"request failed: {type(error).__name__}")
+            return False
+        if result.status is RunStatus.FAILED:
+            self.write(result.output or "run failed")
         return False
 
 
@@ -215,6 +231,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url")
     parser.add_argument("--model")
     parser.add_argument("--docker-image")
+    parser.add_argument("--execution-mode", choices=("auto", "restricted", "trusted"))
+    parser.add_argument("--trusted-user")
     parser.add_argument("--max-turns")
     parser.add_argument("--max-tool-calls")
     parser.add_argument("--context-tokens")
@@ -240,6 +258,16 @@ def _run_application(
             secret_provider=secrets,
         )
         try:
+            if app.sandbox.selected == "trusted":
+                from miniclaw.sandbox.trusted import TRUSTED_WARNING
+
+                print(TRUSTED_WARNING)
+                print(await app._sandbox_status())
+            if app.sandbox.selected == "restricted":
+                print(
+                    "Local command execution is unavailable; Shell/Git tools "
+                    "are disabled. Workspace file tools remain available."
+                )
             await app.start_scheduler()
             await run_app_interactive(AppRepl(app))
         finally:
@@ -337,6 +365,8 @@ def main(
                 "base_url": args.base_url,
                 "model": args.model,
                 "docker_image": args.docker_image,
+                "execution_mode": args.execution_mode,
+                "trusted_user": args.trusted_user,
                 "max_turns": args.max_turns,
                 "max_tool_calls": args.max_tool_calls,
                 "context_tokens": args.context_tokens,

@@ -18,6 +18,8 @@ class CommandRouter:
         "/tasks",
         "/memory <query>",
         "/skills",
+        "/skills errors",
+        "/skill <name> [request]",
         "/agents",
         "/jobs",
         "/cancel <job-id>",
@@ -31,6 +33,8 @@ class CommandRouter:
 
     def handle(self, text: str) -> CommandResult:
         if not text.startswith("/"):
+            return CommandResult(False)
+        if text.startswith('/skill '):
             return CommandResult(False)
         command = text.split(maxsplit=1)[0]
         if command in {"/exit", "/quit"}:

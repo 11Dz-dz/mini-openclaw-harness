@@ -1,6 +1,7 @@
 from miniclaw.core.errors import ModelProtocolError
 from miniclaw.core.messages import (
     ModelEvent,
+    ReasoningDelta,
     ResponseCompleted,
     TextDelta,
     ToolCallDelta,
@@ -9,6 +10,8 @@ from miniclaw.core.messages import (
 
 
 def decode_openai_chunk(payload: dict[str, object]) -> tuple[ModelEvent, ...]:
+    if payload.get('choices') == [] and payload.get('usage') is not None:
+        return (_usage(payload['usage']),)
     try:
         choices = payload["choices"]
         if not isinstance(choices, list):
@@ -23,6 +26,11 @@ def decode_openai_chunk(payload: dict[str, object]) -> tuple[ModelEvent, ...]:
         raise ModelProtocolError("invalid streaming chunk") from exc
 
     events: list[ModelEvent] = []
+    reasoning = delta.get("reasoning_content")
+    if reasoning is not None:
+        if not isinstance(reasoning, str):
+            raise ModelProtocolError("invalid streaming reasoning content")
+        events.append(ReasoningDelta(reasoning))
     content = delta.get("content")
     if isinstance(content, str) and content:
         events.append(TextDelta(content))
@@ -36,15 +44,15 @@ def decode_openai_chunk(payload: dict[str, object]) -> tuple[ModelEvent, ...]:
         function = raw.get("function") or {}
         if not isinstance(function, dict) or not isinstance(raw.get("index"), int):
             raise ModelProtocolError("invalid streaming tool call")
+        # Some compatible providers use empty strings instead of null for
+        # identity fields on continuation chunks.
+        call_id = raw.get("id")
+        name = function.get("name")
         events.append(
             ToolCallDelta(
                 index=raw["index"],
-                call_id=raw.get("id") if isinstance(raw.get("id"), str) else None,
-                name=(
-                    function.get("name")
-                    if isinstance(function.get("name"), str)
-                    else None
-                ),
+                call_id=call_id if isinstance(call_id, str) and call_id else None,
+                name=name if isinstance(name, str) and name else None,
                 arguments_fragment=(
                     function.get("arguments")
                     if isinstance(function.get("arguments"), str)
@@ -59,13 +67,17 @@ def decode_openai_chunk(payload: dict[str, object]) -> tuple[ModelEvent, ...]:
         usage = None
         if raw_usage is not None:
             try:
-                if not isinstance(raw_usage, dict):
-                    raise TypeError
-                usage = Usage(
-                    int(raw_usage["prompt_tokens"]),
-                    int(raw_usage["completion_tokens"]),
-                )
+                usage = _usage(raw_usage)
             except (KeyError, TypeError, ValueError) as exc:
                 raise ModelProtocolError("invalid streaming usage") from exc
         events.append(ResponseCompleted(finish_reason, usage))
     return tuple(events)
+
+
+def _usage(raw):
+    if (not isinstance(raw, dict)
+            or type(raw.get('prompt_tokens')) is not int
+            or type(raw.get('completion_tokens')) is not int
+            or min(raw['prompt_tokens'], raw['completion_tokens']) < 0):
+        raise ModelProtocolError('invalid streaming usage')
+    return Usage(raw['prompt_tokens'], raw['completion_tokens'])

@@ -1,7 +1,11 @@
 import asyncio
+import os
+import re
 from pathlib import PurePosixPath
+from uuid import uuid4
 
 from miniclaw.sandbox.capabilities import SandboxCapabilities, SandboxStrength
+from miniclaw.sandbox.output import communicate_bounded
 from miniclaw.sandbox.types import (
     Command,
     SandboxCapabilityError,
@@ -19,10 +23,14 @@ class DockerSandbox:
         *,
         image: str = "python:3.12-slim",
         allowed_images: tuple[str, ...] = ("python:3.12-slim",),
+        workspace_aliases: tuple[str, ...] = (),
     ) -> None:
         if image not in allowed_images:
             raise ValueError("docker image is not allowlisted")
+        if any(re.fullmatch(r"/[a-zA-Z0-9_-]+", alias) is None for alias in workspace_aliases):
+            raise ValueError("Docker workspace aliases must be top-level container paths")
         self.image = image
+        self.workspace_mounts = tuple(dict.fromkeys(("/workspace", *workspace_aliases)))
 
     async def capabilities(self) -> SandboxCapabilities:
         for argv, failure_reason in (
@@ -41,11 +49,13 @@ class DockerSandbox:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                await asyncio.wait_for(process.communicate(), timeout=3.0)
+                await communicate_bounded(process, 65536, 3.0)
             except FileNotFoundError:
                 return self._unavailable("docker CLI is unavailable")
             except TimeoutError:
                 return self._unavailable("docker capability check timed out")
+            except SandboxResourceExceeded:
+                return self._unavailable("docker capability output exceeded limit")
             if process.returncode != 0:
                 return self._unavailable(failure_reason)
         return SandboxCapabilities(
@@ -76,15 +86,36 @@ class DockerSandbox:
                 "command cwd is outside the workspace"
             )
         relative = cwd.relative_to(workspace)
-        container_cwd = str(PurePosixPath("/workspace") / PurePosixPath(relative))
-        mount_mode = "readonly" if policy.filesystem == "read" else "rw"
-        mount = (
-            f"type=bind,src={workspace},dst=/workspace,{mount_mode}"
+        container_cwd = str(PurePosixPath(self.workspace_mounts[0]) / PurePosixPath(relative))
+        mount_mode = ",readonly" if policy.filesystem == "read" else ""
+        mounts = tuple(
+            item
+            for path in self.workspace_mounts
+            for item in ("--mount", f"type=bind,src={workspace},dst={path}{mount_mode}")
         )
+        allowed = set(policy.allowed_environment)
+        environment = {
+            name: value for name, value in os.environ.items() if name in allowed
+        }
+        environment.update(
+            (name, value)
+            for name, value in command.environment.items()
+            if name in allowed
+        )
+        # Preserve explicit empty values (e.g. GIT_ALLOW_PROTOCOL=) and pass
+        # only policy-allowlisted entries into the container. Otherwise Git's
+        # safety environment would silently disappear at the Docker boundary.
+        environment_args = tuple(
+            item
+            for name, value in sorted(environment.items())
+            for item in ("--env", f"{name}={value}")
+        )
+        container_name = f"miniclaw-command-{uuid4().hex}"
         argv = (
             "docker",
             "run",
             "--rm",
+            "--name", container_name,
             "--pull",
             "never",
             "--network",
@@ -96,10 +127,10 @@ class DockerSandbox:
             "512m",
             "--cpus",
             "1",
-            "--mount",
-            mount,
+            *mounts,
             "--workdir",
             container_cwd,
+            *environment_args,
             self.image,
             *command.argv,
         )
@@ -110,20 +141,20 @@ class DockerSandbox:
             stderr=asyncio.subprocess.PIPE,
         )
         try:
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=policy.timeout_seconds,
-            )
+            stdout, stderr = await communicate_bounded(
+                process, policy.max_output_bytes, policy.timeout_seconds)
         except TimeoutError as exc:
-            process.kill()
-            await process.wait()
             raise SandboxTimeout("docker process exceeded time limit") from exc
-        except asyncio.CancelledError:
-            process.kill()
-            await process.wait()
-            raise
-        if len(stdout) + len(stderr) > policy.max_output_bytes:
-            raise SandboxResourceExceeded("docker output exceeded limit")
+        finally:
+            # A killed Docker CLI may leave its container running.
+            cleanup = await asyncio.create_subprocess_exec(
+                'docker', 'rm', '-f', container_name,
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+            try:
+                await asyncio.wait_for(cleanup.wait(), 3)
+            except TimeoutError:
+                cleanup.kill()
+                await cleanup.wait()
         after = snapshot_files(workspace)
         return SandboxResult(
             process.returncode,

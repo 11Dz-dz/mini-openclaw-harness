@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 from collections.abc import AsyncIterator
+from dataclasses import replace
 
 import httpx
 
@@ -15,6 +16,7 @@ from miniclaw.core.messages import (
     ModelEvent,
     ModelRequest,
     ResponseCompleted,
+    Usage,
 )
 from miniclaw.model.encoding import encode_request
 from miniclaw.model.openai_stream import decode_openai_chunk
@@ -89,6 +91,8 @@ class OpenAICompatibleClient:
                 self._raise_for_status(response)
                 decoder = SSEDecoder()
                 completed = False
+                completion = None
+                usage = None
                 async for chunk in response.aiter_bytes():
                     for data in decoder.feed(chunk):
                         if data == "[DONE]":
@@ -96,6 +100,7 @@ class OpenAICompatibleClient:
                                 raise ModelProtocolError(
                                     "model stream ended without completion"
                                 )
+                            yield replace(completion, usage=usage or completion.usage)
                             return
                         try:
                             payload = json.loads(data)
@@ -108,9 +113,14 @@ class OpenAICompatibleClient:
                         for event in decode_openai_chunk(payload):
                             if isinstance(event, ResponseCompleted):
                                 completed = True
-                            yield event
+                                completion = event
+                            elif isinstance(event, Usage):
+                                usage = event
+                            else:
+                                yield event
                 if not completed:
                     raise ModelProtocolError("model stream ended without completion")
+                yield replace(completion, usage=usage or completion.usage)
         except httpx.TimeoutException as exc:
             raise ModelUnavailableError("model request timed out") from exc
 

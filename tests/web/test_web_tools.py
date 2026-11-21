@@ -153,7 +153,7 @@ async def test_redirect_hops_are_each_screened(tmp_path) -> None:
 
     assert output.startswith("refused:")
     assert "private or loopback" in output
-    assert seen == ["https://example.com/start"]
+    assert seen == ["https://93.184.216.34/start"]
 
 
 async def test_fetch_reports_http_errors(tmp_path) -> None:

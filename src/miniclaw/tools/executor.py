@@ -28,8 +28,15 @@ class ToolExecutor:
     ) -> ToolResultContent:
         try:
             tool = self.registry.get(call.name)
+            if (reason := self.registry.disabled_reason(call.name)) is not None:
+                return ToolResultContent(
+                    call.id, f"tool unavailable: {reason}", is_error=True
+                )
             arguments = validate_arguments(tool.spec.parameters, call.arguments)
             output = await tool.handler(arguments, context)
+            execution_id = None
+            if self.registry.execution_recorder is not None:
+                execution_id = await self.registry.execution_recorder(call, output, context)
         except ToolNotFound:
             return ToolResultContent(call.id, "tool not found", is_error=True)
         except ToolArgumentsInvalid:
@@ -38,15 +45,16 @@ class ToolExecutor:
             # The operator gets the traceback; the model gets only what is safe
             # to show it. Returning a bare "failed" to both made production
             # failures impossible to diagnose.
-            logger.exception(
-                "tool %s failed in run %s", call.name, context.run_id
+            logger.error(
+                "tool %s failed in run %s (%s)", call.name, context.run_id,
+                type(error).__name__,
             )
             return ToolResultContent(
                 call.id,
                 f"tool execution failed: {_describe(error)}",
                 is_error=True,
             )
-        return ToolResultContent(call.id, output)
+        return ToolResultContent(call.id, output, execution_id=execution_id)
 
 
 def _describe(error: Exception) -> str:

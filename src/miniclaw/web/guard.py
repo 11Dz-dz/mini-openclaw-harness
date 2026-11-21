@@ -23,7 +23,7 @@ def _is_blocked(address: str) -> bool:
         return True
     if parsed.version == 6 and parsed.ipv4_mapped is not None:
         parsed = parsed.ipv4_mapped
-    return (
+    return not parsed.is_global or (
         parsed.is_private
         or parsed.is_loopback
         or parsed.is_link_local
@@ -51,7 +51,7 @@ class UrlGuard:
         self._resolve = resolver or _default_resolver
         self._allow_private = allow_private
 
-    def check(self, url: str) -> None:
+    def check(self, url: str) -> tuple[str, ...]:
         parts = urlsplit(url)
         if parts.scheme not in {"http", "https"}:
             raise UnsafeUrl("only http and https URLs may be fetched")
@@ -64,10 +64,19 @@ class UrlGuard:
             port = parts.port or (443 if parts.scheme == "https" else 80)
         except ValueError as error:
             raise UnsafeUrl("URL has an invalid port") from error
-        if self._allow_private:
-            return
-        for address in self._resolve(host, port):
-            if _is_blocked(address):
+        try:
+            addresses = (str(ipaddress.ip_address(host)),)
+        except ValueError:
+            addresses = tuple(dict.fromkeys(self._resolve(host, port)))
+        if not addresses:
+            raise UnsafeUrl(f"host has no addresses: {host}")
+        for address in addresses:
+            try:
+                ipaddress.ip_address(address)
+            except ValueError as error:
+                raise UnsafeUrl("resolver returned a non-IP address") from error
+            if not self._allow_private and _is_blocked(address):
                 raise UnsafeUrl(
                     f"refusing to fetch a private or loopback address: {host}"
                 )
+        return addresses

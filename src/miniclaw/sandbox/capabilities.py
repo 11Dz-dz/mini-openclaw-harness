@@ -5,6 +5,7 @@ from typing import Protocol
 
 class SandboxStrength(StrEnum):
     PROCESS = "process"
+    TRUSTED = "trusted"
     STRONG = "strong"
 
 

@@ -1,7 +1,7 @@
 import json
 from collections.abc import Callable
 
-from miniclaw.sandbox.process import ProcessSandbox
+from miniclaw.sandbox.base import SandboxExecutor
 from miniclaw.sandbox.types import Command, SandboxPolicy, SandboxResult
 from miniclaw.tools.types import (
     RegisteredTool,
@@ -13,19 +13,20 @@ from miniclaw.tools.types import (
 
 
 def make_run_command_tool(
-    sandbox: ProcessSandbox,
+    sandbox: SandboxExecutor,
     *,
     allowed_environment: tuple[str, ...] = ("PATH",),
     timeout_seconds: float = 30.0,
     max_output_bytes: int = 64 * 1024,
     result_sink: Callable[[SandboxResult], None] | None = None,
+    trusted: bool = False,
 ) -> RegisteredTool:
     async def run_command(
         arguments: dict[str, object],
         context: ToolContext,
     ) -> str:
         raw_argv = arguments["argv"]
-        if not isinstance(raw_argv, list) or not all(
+        if not isinstance(raw_argv, list) or not raw_argv or not all(
             isinstance(item, str) and item for item in raw_argv
         ):
             raise ValueError("argv must contain non-empty strings")
@@ -33,8 +34,8 @@ def make_run_command_tool(
             Command(tuple(raw_argv), context.workspace, {}),
             SandboxPolicy(
                 context.workspace,
-                "workspace-write",
-                "deny",
+                "host" if trusted else "workspace-write",
+                "unrestricted" if trusted else "deny",
                 allowed_environment,
                 timeout_seconds,
                 max_output_bytes,
@@ -57,7 +58,8 @@ def make_run_command_tool(
     return RegisteredTool(
         ToolSpec(
             "run_command",
-            "Run an argv command in the bounded process sandbox",
+            ("Run an argv command on the host as a non-root user; no filesystem or network isolation"
+             if trusted else "Run an argv command in the isolated execution backend"),
             {
                 "type": "object",
                 "properties": {
@@ -71,6 +73,7 @@ def make_run_command_tool(
             },
             ToolCapabilities(
                 filesystem="workspace-write",
+                network="unrestricted" if trusted else "deny",
                 subprocess=True,
                 risk_level=RiskLevel.HIGH,
                 side_effects=True,

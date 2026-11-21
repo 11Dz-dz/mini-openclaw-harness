@@ -21,13 +21,9 @@ _ASSERTIONS = {
 }
 _FAULTS = {
     "model_disconnect_after_event",
-    "model_malformed_json",
-    "model_http_status",
     "tool_raise",
     "tool_timeout",
     "sandbox_violation",
-    "checkpoint_corrupt",
-    "process_interrupt_after_checkpoint",
 }
 
 
@@ -42,7 +38,7 @@ def load_eval_cases(path: Path) -> tuple[EvalCase, ...]:
     identifiers: set[str] = set()
     for raw in payload:
         if not isinstance(raw, dict) or not set(raw).issubset(
-            {"id", "prompt", "script", "assertions", "fault_plan"}
+            {"id", "prompt", "script", "assertions", "fault_plan", "files", "approved_tools"}
         ):
             raise EvalLoadError("unknown eval case fields")
         if not {"id", "prompt", "script", "assertions"}.issubset(raw):
@@ -81,7 +77,13 @@ def load_eval_cases(path: Path) -> tuple[EvalCase, ...]:
                 not isinstance(fault, dict)
                 or fault.get("type") not in _FAULTS
             ):
-                raise EvalLoadError("unknown fault kind")
+                raise EvalLoadError("unsupported fault kind")
+        files = raw.get('files', {})
+        approved = raw.get('approved_tools', [])
+        if (not isinstance(files, dict) or not all(isinstance(k, str) and isinstance(v, str)
+                for k, v in files.items()) or not isinstance(approved, list)
+                or not all(isinstance(name, str) for name in approved)):
+            raise EvalLoadError('invalid eval fixtures or approved tools')
         cases.append(
             EvalCase(
                 case_id,
@@ -89,6 +91,8 @@ def load_eval_cases(path: Path) -> tuple[EvalCase, ...]:
                 tuple(script),
                 tuple(decoded_assertions),
                 tuple(faults),
+                files,
+                tuple(approved),
             )
         )
     return tuple(cases)

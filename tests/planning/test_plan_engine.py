@@ -51,6 +51,7 @@ def test_planning_tool_catalog_is_complete(tmp_path) -> None:
         "list_todos",
         "start_task",
         "complete_task",
+        "verify_task",
         "fail_task",
     }
 

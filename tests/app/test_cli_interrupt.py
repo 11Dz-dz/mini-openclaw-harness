@@ -8,6 +8,7 @@ import time
 
 _INTERRUPT_PROBE = """
 from pathlib import Path
+from types import SimpleNamespace
 
 import miniclaw.app
 
@@ -16,6 +17,8 @@ from miniclaw.config import MiniClawConfig
 
 
 class RecordingApp:
+    sandbox = SimpleNamespace(selected="restricted")
+
     async def start_scheduler(self) -> None:
         pass
 

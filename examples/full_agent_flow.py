@@ -103,7 +103,7 @@ Inspect evidence before writing release notes.
                     "remember",
                     (
                         '{"memory_id":"note-1","text":"Artifacts require explicit apply",'
-                        '"source_ref":"demo:notes.txt","tags":["safety"]}'
+                        '"source_ref":"file:notes.txt","tags":["safety"]}'
                     ),
                 ),
                 tool_turn(
@@ -136,7 +136,8 @@ Inspect evidence before writing release notes.
         memory_found = bool(await app.memory.search("explicit apply"))
         job = await app.scheduler.get("job-1")
         denied = any(
-            getattr(item, "output", "") == "permission denied"
+            getattr(item, "tool_call_id", "") == "command-1"
+            and getattr(item, "is_error", False)
             for message in result.messages
             for item in message.content
         )

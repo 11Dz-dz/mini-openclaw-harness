@@ -35,6 +35,7 @@ class ToolContext:
     run_id: str
     session_id: str
     workspace: Path
+    request_text: str | None = None
 
 
 ToolHandler = Callable[[Mapping[str, object], ToolContext], Awaitable[str]]

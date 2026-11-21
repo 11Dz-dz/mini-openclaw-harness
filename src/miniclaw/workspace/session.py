@@ -1,16 +1,17 @@
-import json
-import os
 import shutil
-import tempfile
-from dataclasses import dataclass
+import stat
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
 from miniclaw.core.events import EventEnvelope
+from miniclaw.permissions.preview import arguments_preview
 from miniclaw.permissions.types import PermissionRequest
 from miniclaw.sessions.events import JsonlEventStore
 from miniclaw.tools.types import RiskLevel, ToolCapabilities
+from miniclaw.workspace.apply import apply_transaction, file_state, safe_apply_path
+from miniclaw.workspace.copying import check_copy_bounds, ignored_entries
 from miniclaw.workspace.diff import snapshot_files
 from miniclaw.workspace.paths import WorkspaceEscape, resolve_workspace_path
 
@@ -31,6 +32,8 @@ class WorkspaceSession:
     root: Path
     workspace: Path
     artifacts: Path
+    baseline: dict[Path, str] = field(default_factory=dict)
+    baseline_modes: dict[Path, int] = field(default_factory=dict)
 
     @classmethod
     def create(
@@ -40,6 +43,11 @@ class WorkspaceSession:
     ) -> "WorkspaceSession":
         sandbox_id = str(uuid4())
         session_root = root.resolve() / sandbox_id
+        if source is not None:
+            source_root = source.resolve()
+            if session_root.is_relative_to(source_root):
+                raise ValueError("sandbox root must be outside the source workspace")
+            check_copy_bounds(source_root)
         workspace = session_root / "workspace"
         artifacts = session_root / "artifacts"
         session_root.mkdir(parents=True)
@@ -49,59 +57,45 @@ class WorkspaceSession:
         else:
             source_root = source.resolve()
 
-            def reject_symlinks(
-                current: str,
-                names: list[str],
-            ) -> set[str]:
-                current_path = Path(current)
-                return {
-                    name
-                    for name in names
-                    if (current_path / name).is_symlink()
-                }
-
             shutil.copytree(
                 source_root,
                 workspace,
                 symlinks=False,
-                ignore=reject_symlinks,
+                ignore=ignored_entries,
             )
-        return cls(sandbox_id, session_root, workspace, artifacts)
+        return cls(sandbox_id, session_root, workspace, artifacts,
+                   snapshot_files(workspace),
+                   {p.relative_to(workspace): stat.S_IMODE(p.stat().st_mode)
+                    for p in workspace.rglob("*") if p.is_file() and not p.is_symlink()})
+
+    def _preflight(self, destination, paths, expected_artifacts=None):
+        current = snapshot_files(self.workspace)
+        states = {}
+        for relative in paths:
+            source = safe_apply_path(self.workspace, relative)
+            target = safe_apply_path(destination, relative)
+            if relative not in current and relative not in self.baseline:
+                raise WorkspaceEscape("artifact is not in the workspace manifest")
+            state = file_state(source)
+            states[relative] = state
+            if expected_artifacts is not None and state != expected_artifacts[relative]:
+                raise PermissionError(f"artifact changed after approval: {relative}")
+            actual = file_state(target)
+            actual_digest = actual.split('@')[0] if actual else None
+            expected_mode = self.baseline_modes.get(relative)
+            if (actual_digest != self.baseline.get(relative)
+                    or (actual and expected_mode is not None
+                        and int(actual.split('@')[1], 8) != expected_mode)):
+                raise PermissionError(f"destination changed since workspace copy: {relative}")
+        return states
 
     def manifest(self) -> tuple[Path, ...]:
-        return tuple(snapshot_files(self.workspace))
+        return tuple(sorted(set(snapshot_files(self.workspace)) | set(self.baseline)))
 
-    def apply_artifacts(
-        self,
-        destination: Path,
-        approved_paths: tuple[Path, ...],
-    ) -> tuple[Path, ...]:
-        manifest = set(self.manifest())
-        applied = []
-        for relative in approved_paths:
-            if relative not in manifest:
-                raise WorkspaceEscape("artifact is not in the workspace manifest")
-            source = resolve_workspace_path(self.workspace, relative)
-            target = resolve_workspace_path(destination, relative)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            descriptor, temporary_name = tempfile.mkstemp(
-                prefix=f".{target.name}.miniclaw.",
-                suffix=".tmp",
-                dir=target.parent,
-            )
-            temporary = Path(temporary_name)
-            try:
-                with source.open("rb") as reader, os.fdopen(
-                    descriptor, "wb"
-                ) as writer:
-                    shutil.copyfileobj(reader, writer)
-                    writer.flush()
-                    os.fsync(writer.fileno())
-                temporary.replace(target)
-            finally:
-                temporary.unlink(missing_ok=True)
-            applied.append(relative)
-        return tuple(applied)
+    def apply_artifacts(self, destination: Path, approved_paths: tuple[Path, ...], *,
+                        expected_artifacts: dict | None = None) -> tuple[Path, ...]:
+        normalized = tuple(dict.fromkeys(Path(path) for path in approved_paths))
+        return apply_transaction(self, destination, normalized, expected_artifacts)
 
     async def apply_artifacts_approved(
         self,
@@ -112,8 +106,8 @@ class WorkspaceSession:
         event_store: JsonlEventStore,
         request_id: str | None = None,
     ) -> tuple[Path, ...]:
-        manifest = set(self.manifest())
         normalized = tuple(Path(path) for path in approved_paths)
+        manifest = self._preflight(destination, normalized)
         for relative in normalized:
             if relative not in manifest:
                 raise WorkspaceEscape("artifact is not in the workspace manifest")
@@ -127,10 +121,11 @@ class WorkspaceSession:
                 f"artifact-{self.sandbox_id}",
                 operation_id,
                 "apply_artifacts",
-                json.dumps(
-                    {"paths": path_values},
-                    separators=(",", ":"),
-                ),
+                arguments_preview({"destination": str(destination.resolve()),
+                                   "paths": path_values,
+                                   "sha256_and_mode": {str(p): manifest[p] for p in normalized},
+                                   "operations": {str(p): ('delete' if manifest[p] is None else
+                                       'modify' if p in self.baseline else 'create') for p in normalized}}),
                 ToolCapabilities(
                     filesystem="workspace-write",
                     risk_level=RiskLevel.HIGH,
@@ -140,9 +135,9 @@ class WorkspaceSession:
                 "apply sandbox artifacts to the destination workspace",
             )
         )
-        if not resolution.approved:
+        if resolution.request_id != operation_id or not resolution.approved:
             raise PermissionError(f"artifact application denied: {resolution.reason}")
-        applied = self.apply_artifacts(destination, normalized)
+        applied = self.apply_artifacts(destination, normalized, expected_artifacts=manifest)
         previous = await event_store.load()
         run_id = f"artifact-{self.sandbox_id}"
         run_events = tuple(event for event in previous if event.run_id == run_id)

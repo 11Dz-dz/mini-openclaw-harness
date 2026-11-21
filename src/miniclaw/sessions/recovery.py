@@ -59,3 +59,30 @@ def pending_tool_executions(
             idempotent = False
         records.append(ToolExecutionRecord(tool_call_id, "started", idempotent))
     return tuple(records)
+
+
+def close_interrupted_tool_calls(messages: tuple[Message, ...]) -> tuple[Message, ...]:
+    """Close protocol gaps explicitly, without replaying uncertain effects."""
+    restored = []
+    pending = {}
+
+    def close_pending():
+        for call_id in pending:
+            restored.append(Message('tool', (ToolResultContent(
+                call_id, 'Execution interrupted; outcome unknown. This call was not '
+                'replayed. Inspect current state before attempting it again.', True),)))
+        pending.clear()
+
+    for message in messages:
+        if message.role != 'tool':
+            close_pending()
+        for item in message.content:
+            if isinstance(item, ToolCall):
+                pending[item.id] = item
+            elif isinstance(item, ToolResultContent):
+                if item.tool_call_id not in pending:
+                    raise ValueError('orphaned tool result in checkpoint')
+                pending.pop(item.tool_call_id)
+        restored.append(message)
+    close_pending()
+    return tuple(restored)

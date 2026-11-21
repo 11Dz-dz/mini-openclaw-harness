@@ -35,6 +35,7 @@ async def test_final_tool_catalog_contains_product_tools(tmp_path: Path) -> None
     required = {
         "read_file",
         "write_file",
+        "replace_text",
         "run_command",
         "remember",
         "search_memory",

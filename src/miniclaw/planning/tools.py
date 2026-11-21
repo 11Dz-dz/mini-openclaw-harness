@@ -60,24 +60,34 @@ def make_planning_tools(store: PlanStore) -> tuple[RegisteredTool, ...]:
         arguments,
         target: TaskStatus,
         evidence: tuple[str, ...] = (),
+        run_id: str = '',
     ) -> str:
         task = await store.transition(
             str(arguments["plan_id"]),
             str(arguments["task_id"]),
             target,
             evidence=evidence,
+            run_id=run_id,
         )
         return task.status.value
 
     async def start_task(arguments, context: ToolContext) -> str:
-        return await transition(arguments, TaskStatus.IN_PROGRESS)
+        return await transition(arguments, TaskStatus.IN_PROGRESS, run_id=context.run_id)
 
     async def complete_task(arguments, context: ToolContext) -> str:
+        evidence = tuple(str(item) for item in arguments['evidence'])
+        target = (TaskStatus.DONE if evidence and all(item.startswith('execution:') for item in evidence)
+                  else TaskStatus.REPORTED_DONE)
         return await transition(
             arguments,
-            TaskStatus.DONE,
-            tuple(str(item) for item in arguments["evidence"]),
+            target,
+            evidence,
+            run_id=context.run_id,
         )
+
+    async def verify_task(arguments, context: ToolContext) -> str:
+        return await transition(arguments, TaskStatus.DONE,
+            tuple(str(item) for item in arguments['evidence']), run_id=context.run_id)
 
     async def fail_task(arguments, context: ToolContext) -> str:
         return await transition(
@@ -120,7 +130,8 @@ def make_planning_tools(store: PlanStore) -> tuple[RegisteredTool, ...]:
         ("start_task", "Start one task", task_schema, start_task),
         (
             "complete_task",
-            "Complete one task with evidence",
+            "Report completion. Text claims remain reported_done; DONE requires successful "
+            "execution: IDs emitted by tools while this task is active in this run.",
             {
                 **task_schema,
                 "properties": {
@@ -130,6 +141,12 @@ def make_planning_tools(store: PlanStore) -> tuple[RegisteredTool, ...]:
                 "required": ["plan_id", "task_id", "evidence"],
             },
             complete_task,
+        ),
+        (
+            "verify_task", "Verify a reported task using execution: IDs from this task and run",
+            {**task_schema, 'properties': {**task_schema['properties'],
+                'evidence': {'type': 'array', 'items': {'type': 'string'}, 'minItems': 1}},
+             'required': ['plan_id', 'task_id', 'evidence']}, verify_task,
         ),
         (
             "fail_task",

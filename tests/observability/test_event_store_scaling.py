@@ -69,7 +69,7 @@ async def test_conflicting_duplicate_is_still_rejected(tmp_path: Path) -> None:
             EventEnvelope(
                 "event-1",
                 "run-1",
-                "session-1",
+                "different-session",
                 1,
                 datetime(2026, 7, 26, tzinfo=UTC),
                 RunStarted("different payload"),
@@ -85,7 +85,9 @@ async def test_identical_duplicate_is_still_ignored(tmp_path: Path) -> None:
     await store.append(first)
     await store.append(first)
 
-    assert await store.load() == (first,)
+    stored, = await store.load()
+    assert stored.event_id == first.event_id
+    assert stored.payload.prompt == '<omitted>'
 
 
 async def test_sequences_stay_scoped_per_run(tmp_path: Path) -> None:

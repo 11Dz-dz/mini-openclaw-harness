@@ -15,7 +15,7 @@ async def test_memory_round_trip_and_search(tmp_path: Path) -> None:
         created_at="2026-07-26T00:00:00+00:00",
     )
 
-    await store.put(memory)
+    await store.put(memory, confirmed=True)
 
     assert await store.search("python project") == (memory,)
 

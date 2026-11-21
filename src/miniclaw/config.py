@@ -13,6 +13,8 @@ CONFIG_FIELDS = (
     "base_url",
     "api_key",
     "require_strong_sandbox",
+    "execution_mode",
+    "trusted_user",
     "docker_image",
     "max_turns",
     "max_tool_calls",
@@ -35,6 +37,8 @@ class MiniClawConfig:
     max_tool_calls: int = 32
     context_tokens: int = 32_000
     reserve_output_tokens: int = 4_000
+    execution_mode: str = "auto"
+    trusted_user: str = "miniclaw-runner"
 
 
 class SecretProvider(Protocol):
@@ -57,6 +61,8 @@ def default_config_values() -> dict[str, object]:
         "model": "fake",
         "base_url": None,
         "require_strong_sandbox": False,
+        "execution_mode": "auto",
+        "trusted_user": "miniclaw-runner",
         "docker_image": "python:3.12-slim",
         "max_turns": 16,
         "max_tool_calls": 32,
@@ -71,6 +77,8 @@ _ENVIRONMENT_FIELDS = {
     "OPENAI_MODEL": "model",
     "OPENAI_BASE_URL": "base_url",
     "MINICLAW_REQUIRE_STRONG_SANDBOX": "require_strong_sandbox",
+    "MINICLAW_EXECUTION_MODE": "execution_mode",
+    "MINICLAW_TRUSTED_USER": "trusted_user",
     "MINICLAW_DOCKER_IMAGE": "docker_image",
     "MINICLAW_MAX_TURNS": "max_turns",
     "MINICLAW_MAX_TOOL_CALLS": "max_tool_calls",
@@ -90,6 +98,18 @@ INTEGER_CONFIG_FIELDS = (
 def coerce_config_value(field: str, value: object) -> object:
     if field not in CONFIG_FIELDS:
         raise ValueError(f"unknown config field: {field}")
+    if field == "execution_mode":
+        if value not in ("auto", "restricted", "trusted"):
+            raise ValueError("execution_mode must be auto, restricted, or trusted")
+        return value
+    if field == "trusted_user":
+        import re
+
+        if not isinstance(value, str) or not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", value):
+            raise ValueError("trusted_user must be a valid non-root account name")
+        if value == "root":
+            raise ValueError("trusted_user cannot be root")
+        return value
     if field in _PATH_FIELDS:
         if not isinstance(value, (str, Path)):
             raise ValueError(f"{field} must be a path")
@@ -150,6 +170,8 @@ def validate_config_values(values: Mapping[str, object]) -> None:
     converted = {
         field: coerce_config_value(field, value) for field, value in values.items()
     }
+    if converted.get("require_strong_sandbox") and converted.get("execution_mode", "auto") != "auto":
+        raise ValueError("require_strong_sandbox requires execution_mode=auto")
     context_tokens = converted.get("context_tokens")
     reserve = converted.get("reserve_output_tokens")
     if (

@@ -5,6 +5,9 @@ from miniclaw.tools.types import RiskLevel, ToolCapabilities
 
 
 class DefaultPermissionPolicy:
+    def __init__(self, *, trusted_state_tools: tuple[str, ...] = ()) -> None:
+        self.trusted_state_tools = frozenset(trusted_state_tools)
+
     def evaluate(
         self,
         *,
@@ -12,6 +15,17 @@ class DefaultPermissionPolicy:
         capabilities: ToolCapabilities,
         arguments: Mapping[str, object],
     ) -> PermissionEvaluation:
+        if (
+            capabilities.filesystem not in {"none", "read", "workspace-write"}
+            or capabilities.network not in {"deny", "unrestricted"}
+            or not isinstance(capabilities.risk_level, RiskLevel)
+            or not isinstance(capabilities.secrets, tuple)
+            or not all(isinstance(name, str) for name in capabilities.secrets)
+            or any(type(value) is not bool for value in (
+                capabilities.subprocess,
+                capabilities.side_effects, capabilities.idempotent))
+        ):
+            return PermissionEvaluation(PermissionDecision.DENY, "unknown capability value")
         secret_keys = {"api_key", "token", "secret", "password"}
         if (
             any(key.casefold() in secret_keys for key in arguments)
@@ -35,20 +49,22 @@ class DefaultPermissionPolicy:
                 PermissionDecision.ASK,
                 "non-idempotent subprocess or workspace write",
             )
-        valid_filesystems = {"none", "read", "workspace-write"}
-        valid_networks = {"deny", "unrestricted"}
-        if (
-            capabilities.filesystem not in valid_filesystems
-            or capabilities.network not in valid_networks
-        ):
-            return PermissionEvaluation(
-                PermissionDecision.DENY, "unknown capability value"
-            )
+        if (tool_name in self.trusted_state_tools
+                and capabilities.filesystem == "none"
+                and capabilities.network == "deny"
+                and not capabilities.subprocess and not capabilities.secrets
+                and capabilities.idempotent
+                and capabilities.risk_level is RiskLevel.LOW):
+            return PermissionEvaluation(PermissionDecision.ALLOW,
+                                        "explicitly trusted internal state operation")
         if (
             capabilities.filesystem == "read"
             and not capabilities.subprocess
             and capabilities.network == "deny"
             and not capabilities.secrets
+            and not capabilities.side_effects
+            and capabilities.idempotent
+            and capabilities.risk_level is RiskLevel.LOW
         ):
             return PermissionEvaluation(PermissionDecision.ALLOW, "read-only tool")
         if (
@@ -56,6 +72,9 @@ class DefaultPermissionPolicy:
             and not capabilities.subprocess
             and capabilities.network == "deny"
             and not capabilities.secrets
+            and not capabilities.side_effects
+            and capabilities.idempotent
+            and capabilities.risk_level is RiskLevel.LOW
         ):
             return PermissionEvaluation(PermissionDecision.ALLOW, "pure computation")
         # A tool that declares no side effects, no network and no writes is safe

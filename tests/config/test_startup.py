@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -623,6 +624,8 @@ def test_run_application_closes_app_after_interactive_success(
     closed: list[bool] = []
 
     class RecordingApp:
+        sandbox = SimpleNamespace(selected="restricted")
+
         async def start_scheduler(self) -> None:
             pass
 
@@ -658,6 +661,8 @@ def test_run_application_closes_app_after_interactive_failure(
     closed: list[bool] = []
 
     class RecordingApp:
+        sandbox = SimpleNamespace(selected="restricted")
+
         async def start_scheduler(self) -> None:
             pass
 

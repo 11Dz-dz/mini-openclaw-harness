@@ -68,6 +68,16 @@ class AgentLoopFactory:
             name for name in spec.allowed_tools if name != "delegate_task"
         )
         registry = self.tools.subset(allowed)
+        # These children share a parent snapshot. A tool that can write or
+        # launch a persistent external service cannot be made safe by an
+        # allowlist alone; inspection children must not mutate that snapshot.
+        for tool in registry.values():
+            if (tool.spec.capabilities.filesystem == 'workspace-write'
+                    or (tool.spec.capabilities.subprocess
+                        and tool.spec.capabilities.network == 'unrestricted')
+                    or tool.spec.name.startswith('mcp_')):
+                registry.disable(tool.spec.name,
+                    'subagents sharing a workspace are restricted to inspection')
         if (
             "delegate_task" in spec.allowed_tools
             and spec.depth < self.max_depth

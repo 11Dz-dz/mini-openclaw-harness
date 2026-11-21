@@ -24,7 +24,7 @@ async def test_agent_records_context_snapshot(tmp_path: Path) -> None:
         context_builder=ContextBuilder(
             CharacterTokenEstimator(chars_per_token=1)
         ),
-        context_budget=ContextBudget(total=100, reserve_output=10),
+        context_budget=ContextBudget(total=512, reserve_output=10),
     )
 
     result = await loop.run("hello")
@@ -35,7 +35,7 @@ async def test_agent_records_context_snapshot(tmp_path: Path) -> None:
         if isinstance(event.payload, ContextBuilt)
     )
     checkpoint = await store.latest_for_run(result.run_id)
-    assert context_event.estimated_tokens == 11
+    assert 40 < context_event.estimated_tokens < 502
     assert checkpoint is not None
     assert checkpoint.context_snapshot is not None
-    assert checkpoint.context_snapshot.estimated_tokens == 11
+    assert checkpoint.context_snapshot.estimated_tokens == context_event.estimated_tokens

@@ -21,6 +21,7 @@ async def test_agent_loop_completes_with_text() -> None:
         "ModelStreamStarted",
         "TextDelta",
         "RunCompleted",
+        "RunEnded",
     ]
 
 

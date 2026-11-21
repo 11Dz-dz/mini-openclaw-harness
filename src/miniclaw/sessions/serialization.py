@@ -39,6 +39,7 @@ def _encode_content(item: object) -> dict[str, object]:
             "tool_call_id": item.tool_call_id,
             "output": item.output,
             "is_error": item.is_error,
+            **({"execution_id": item.execution_id} if item.execution_id else {}),
         }
     raise PersistenceError("unknown message content")
 
@@ -64,6 +65,7 @@ def _decode_content(payload: object) -> object:
                 str(payload["tool_call_id"]),
                 str(payload["output"]),
                 bool(payload["is_error"]),
+                str(payload['execution_id']) if payload.get('execution_id') else None,
             )
     except (KeyError, TypeError) as exc:
         raise PersistenceError("invalid message content") from exc
@@ -82,6 +84,8 @@ def encode_checkpoint(checkpoint: Checkpoint) -> dict[str, object]:
             {
                 "role": message.role,
                 "content": [_encode_content(item) for item in message.content],
+                **({"reasoning_content": message.reasoning_content}
+                   if message.reasoning_content is not None else {}),
             }
             for message in checkpoint.messages
         ],
@@ -135,7 +139,11 @@ def decode_checkpoint(payload: Mapping[str, object]) -> Checkpoint:
             raise TypeError
         messages = []
         for raw in raw_messages:
-            if not isinstance(raw, dict) or set(raw) != {"role", "content"}:
+            if (not isinstance(raw, dict) or not {"role", "content"} <= set(raw)
+                    or set(raw) - {"role", "content", "reasoning_content"}):
+                raise TypeError
+            reasoning = raw.get("reasoning_content")
+            if reasoning is not None and (raw["role"] != "assistant" or not isinstance(reasoning, str)):
                 raise TypeError
             content = raw["content"]
             if not isinstance(content, list):
@@ -144,6 +152,7 @@ def decode_checkpoint(payload: Mapping[str, object]) -> Checkpoint:
                 Message(
                     raw["role"],
                     tuple(_decode_content(item) for item in content),
+                    reasoning,
                 )
             )
         context_snapshot = None
@@ -198,11 +207,15 @@ def _event_payload_types() -> dict[str, type]:
     from miniclaw.agent.loop import (
         ApprovalRequested,
         ApprovalResolved,
+        CompletionChecked,
         ContextBuilt,
         ContextInjected,
         ModelStreamStarted,
+        ModelUsage,
         RunCancelled,
         RunCompleted,
+        RunEnded,
+        RunFailed,
         RunStarted,
     )
     from miniclaw.workspace.session import ArtifactApplied
@@ -213,12 +226,16 @@ def _event_payload_types() -> dict[str, type]:
             RunStarted,
             ApprovalRequested,
             ApprovalResolved,
+            CompletionChecked,
             ContextBuilt,
             ContextInjected,
             ModelStreamStarted,
+            ModelUsage,
             TextDelta,
             ToolCallDelta,
             RunCompleted,
+            RunFailed,
+            RunEnded,
             RunCancelled,
             ArtifactApplied,
         )

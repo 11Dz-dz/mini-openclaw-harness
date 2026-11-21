@@ -28,4 +28,7 @@ class MemoryContextProvider:
         self.source = MemoryContextSource(store, limit=limit)
 
     async def build(self, prompt: str) -> tuple[ContextSource, ...]:
-        return (await self.source.build(prompt),)
+        records = await self.source.store.search(prompt, limit=self.source.limit)
+        return tuple(ContextSource(f'memory:{record.memory_id}',
+            f'[{record.memory_id}] source={record.source_ref}\n{record.text}',
+            DEFAULT_CONTEXT_PRIORITIES['memory']) for record in records)

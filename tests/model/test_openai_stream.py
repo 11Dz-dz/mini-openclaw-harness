@@ -43,6 +43,17 @@ def test_decode_text_and_tool_deltas() -> None:
     )
 
 
+def test_empty_continuation_identity_is_not_a_new_tool_call() -> None:
+    payload = {"choices": [{"delta": {"tool_calls": [{
+        "index": 1,
+        "id": "",
+        "function": {"name": "", "arguments": '"guide.md"}'},
+    }]}}]}
+    assert decode_openai_chunk(payload) == (
+        ToolCallDelta(1, arguments_fragment='"guide.md"}'),
+    )
+
+
 def test_decode_completion_usage() -> None:
     payload = {
         "choices": [{"delta": {}, "finish_reason": "stop"}],

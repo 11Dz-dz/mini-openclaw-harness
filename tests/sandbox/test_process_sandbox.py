@@ -1,89 +1,34 @@
+import asyncio
 import sys
 from pathlib import Path
 
 import pytest
 
 from miniclaw.sandbox.process import ProcessSandbox
-from miniclaw.sandbox.types import (
-    Command,
-    SandboxPolicy,
-    SandboxResourceExceeded,
-    SandboxTimeout,
-)
+from miniclaw.sandbox.types import Command, SandboxCapabilityError, SandboxPolicy
 
 
-async def test_timeout_terminates_process(tmp_path: Path) -> None:
-    sandbox = ProcessSandbox()
-    policy = SandboxPolicy(tmp_path, "workspace-write", "deny", (), 0.05, 4096)
-    command = Command(
-        (sys.executable, "-c", "import time; time.sleep(10)"),
-        tmp_path,
-        {},
-    )
-
-    with pytest.raises(SandboxTimeout):
-        await sandbox.execute(command, policy)
-
-
-async def test_environment_is_allowlisted(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("filesystem", ["none", "read", "workspace-write"])
+async def test_unisolated_process_is_rejected_before_launch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, filesystem: str
 ) -> None:
-    monkeypatch.setenv("SECRET_TOKEN", "must-not-leak")
-    sandbox = ProcessSandbox()
-    policy = SandboxPolicy(
-        tmp_path,
-        "workspace-write",
-        "deny",
-        ("PATH",),
-        2.0,
-        4096,
-    )
-    command = Command(
-        (
-            sys.executable,
-            "-c",
-            "import os; print(os.environ.get('SECRET_TOKEN', 'missing'))",
-        ),
-        tmp_path,
-        {},
-    )
+    async def forbidden_launch(*args, **kwargs):
+        pytest.fail("the unavailable process backend must never start a child")
 
-    result = await sandbox.execute(command, policy)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", forbidden_launch)
 
-    assert result.stdout.strip() == "missing"
-    assert result.warnings == (
-        "network isolation is not enforced by process backend",
-    )
+    with pytest.raises(SandboxCapabilityError, match="isolation"):
+        await ProcessSandbox().execute(
+            Command((sys.executable, "-c", "print('should not run')"), tmp_path, {}),
+            SandboxPolicy(tmp_path, filesystem, "deny", ("PATH",), 2, 4096),
+        )
 
 
-async def test_output_over_limit_is_rejected(tmp_path: Path) -> None:
-    sandbox = ProcessSandbox()
-    policy = SandboxPolicy(tmp_path, "workspace-write", "deny", (), 2.0, 32)
-    command = Command(
-        (sys.executable, "-c", "print('x' * 1024)"),
-        tmp_path,
-        {},
-    )
-
-    with pytest.raises(SandboxResourceExceeded):
-        await sandbox.execute(command, policy)
-
-
-async def test_changed_paths_are_relative_to_workspace(tmp_path: Path) -> None:
-    sandbox = ProcessSandbox()
-    policy = SandboxPolicy(tmp_path, "workspace-write", "deny", (), 2.0, 4096)
-    command = Command(
-        (
-            sys.executable,
-            "-c",
-            "from pathlib import Path; Path('created.txt').write_text('ok')",
-        ),
-        tmp_path,
-        {},
-    )
-
-    result = await sandbox.execute(command, policy)
-
-    assert result.exit_code == 0
-    assert result.changed_paths == (Path("created.txt"),)
+async def test_requesting_network_access_cannot_enable_process_execution(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(SandboxCapabilityError, match="isolation"):
+        await ProcessSandbox().execute(
+            Command((sys.executable, "-c", "print('should not run')"), tmp_path, {}),
+            SandboxPolicy(tmp_path, "workspace-write", "allow", (), 2, 4096),
+        )

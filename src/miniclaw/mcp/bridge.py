@@ -1,7 +1,8 @@
 import re
 
+from miniclaw.core.errors import ToolSchemaError
 from miniclaw.mcp.client import StdioMcpClient
-from miniclaw.mcp.types import McpError, McpTool
+from miniclaw.mcp.types import McpTool
 from miniclaw.tools.types import (
     RegisteredTool,
     RiskLevel,
@@ -48,10 +49,7 @@ def make_mcp_tool(
     tool: McpTool,
 ) -> RegisteredTool:
     async def handler(arguments, context: ToolContext) -> str:
-        try:
-            return await client.call_tool(tool.name, dict(arguments))
-        except McpError as error:
-            return f"mcp tool failed: {error}"
+        return await client.call_tool(tool.name, dict(arguments))
 
     description = tool.description or f"MCP tool '{tool.name}' from {server}"
     return RegisteredTool(
@@ -80,7 +78,7 @@ async def register_mcp_tools(
         candidate = make_mcp_tool(client, server, tool)
         try:
             registry.register(candidate)
-        except ValueError:
+        except (ValueError, ToolSchemaError):
             continue
         registered.append(candidate.spec.name)
     return tuple(registered)

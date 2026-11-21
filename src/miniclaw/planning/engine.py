@@ -15,10 +15,12 @@ _TRANSITIONS = {
     TaskStatus.OPEN: {TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED},
     TaskStatus.IN_PROGRESS: {
         TaskStatus.DONE,
+        TaskStatus.REPORTED_DONE,
         TaskStatus.FAILED,
         TaskStatus.CANCELLED,
     },
     TaskStatus.FAILED: {TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED},
+    TaskStatus.REPORTED_DONE: {TaskStatus.DONE, TaskStatus.IN_PROGRESS, TaskStatus.CANCELLED},
 }
 
 
@@ -70,6 +72,10 @@ class PlanEngine:
         *,
         evidence: tuple[str, ...] = (),
     ) -> Task:
+        if target in {TaskStatus.DONE, TaskStatus.REPORTED_DONE} and (
+            not evidence or not all(isinstance(item, str) and item.strip() for item in evidence)
+        ):
+            raise PlanTransitionError('completion requires nonempty evidence or an explicit claim')
         if target not in _TRANSITIONS.get(task.status, set()):
             raise PlanTransitionError(
                 f"illegal task transition: {task.status} -> {target}"

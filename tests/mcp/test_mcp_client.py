@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from miniclaw.core.messages import ToolCall
 from miniclaw.mcp.bridge import (
     make_mcp_tool,
     mcp_capabilities,
@@ -14,6 +15,7 @@ from miniclaw.mcp.types import McpError, McpTimeout, McpTool
 from miniclaw.permissions.policy import DefaultPermissionPolicy
 from miniclaw.permissions.types import PermissionDecision
 from miniclaw.tools.builtin.files import make_file_tools
+from miniclaw.tools.executor import ToolExecutor
 from miniclaw.tools.registry import ToolRegistry
 from miniclaw.tools.types import RiskLevel, ToolContext
 
@@ -51,12 +53,12 @@ async def test_tools_are_discovered() -> None:
     finally:
         await client.aclose()
 
-    assert {tool.name for tool in tools} == {"echo", "danger", "broken-schema"}
+    assert {tool.name for tool in tools} == {"echo", "danger"}
     echo = next(tool for tool in tools if tool.name == "echo")
     assert echo.input_schema["properties"] == {"text": {"type": "string"}}
 
 
-async def test_unusable_server_schema_is_replaced_not_trusted() -> None:
+async def test_unusable_server_schema_is_omitted_instead_of_opened() -> None:
     client = _client()
     try:
         await client.start()
@@ -64,8 +66,7 @@ async def test_unusable_server_schema_is_replaced_not_trusted() -> None:
     finally:
         await client.aclose()
 
-    broken = next(tool for tool in tools if tool.name == "broken-schema")
-    assert broken.input_schema["type"] == "object"
+    assert all(tool.name != 'broken-schema' for tool in tools)
 
 
 async def test_tool_call_round_trip() -> None:
@@ -200,11 +201,13 @@ async def test_failing_mcp_tool_returns_a_readable_message(tmp_path: Path) -> No
     try:
         await client.start()
         await register_mcp_tools(registry, client, "echo")
-        output = await registry.get("mcp_echo_danger").handler({}, _context(tmp_path))
+        output = await ToolExecutor(registry).execute(
+            ToolCall('failure', 'mcp_echo_danger', {}), _context(tmp_path))
     finally:
         await client.aclose()
 
-    assert output.startswith("mcp tool failed:")
+    assert output.is_error is True
+    assert 'McpError' in output.output
 
 
 async def test_colliding_registration_is_skipped_not_replaced(tmp_path: Path) -> None:

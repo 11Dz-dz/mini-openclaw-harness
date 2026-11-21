@@ -1,5 +1,8 @@
+import asyncio
+
 import pytest
 
+from miniclaw.sandbox.capabilities import SandboxCapabilities, SandboxStrength
 from miniclaw.sandbox.docker import DockerSandbox
 from miniclaw.sandbox.router import SandboxCapabilityUnavailable, SandboxRouter
 from miniclaw.sandbox.types import Command, SandboxPolicy
@@ -41,3 +44,51 @@ async def test_docker_executor_when_available(tmp_path) -> None:
     )
 
     assert result.stdout.strip() == "ok"
+
+
+async def test_docker_forwards_only_allowlisted_environment_and_preserves_empty_values(
+    tmp_path, monkeypatch
+) -> None:
+    recorded = []
+    monkeypatch.setenv("AUDIT_ALLOWED", "host value")
+    monkeypatch.setenv("AUDIT_UNDECLARED", "synthetic host secret")
+
+    async def available(self):
+        return SandboxCapabilities(True, SandboxStrength.STRONG, True, True, True, "test")
+
+    class Completed:
+        returncode = 0
+
+        def __init__(self):
+            self.stdout = asyncio.StreamReader()
+            self.stdout.feed_data(b'ok')
+            self.stdout.feed_eof()
+            self.stderr = asyncio.StreamReader()
+            self.stderr.feed_eof()
+
+        async def wait(self):
+            return 0
+
+    async def launch(*argv, **kwargs):
+        recorded.append(argv)
+        return Completed()
+
+    monkeypatch.setattr(DockerSandbox, "capabilities", available)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", launch)
+
+    await DockerSandbox(workspace_aliases=("/app",)).execute(
+        Command(
+            ("git", "status"), tmp_path,
+            {"GIT_ALLOW_PROTOCOL": "", "AUDIT_ALLOWED": "explicit value", "AUDIT_UNDECLARED": "synthetic explicit secret"},
+        ),
+        SandboxPolicy(tmp_path, "read", "deny", ("GIT_ALLOW_PROTOCOL", "AUDIT_ALLOWED"), 2, 4096),
+    )
+
+    argv = recorded[0]
+    for directory in ("/workspace", "/app"):
+        assert f"type=bind,src={tmp_path.resolve()},dst={directory},readonly" in argv
+    assert "GIT_ALLOW_PROTOCOL=" in argv
+    assert "AUDIT_ALLOWED=explicit value" in argv
+    assert not any("AUDIT_UNDECLARED" in argument or "secret" in argument for argument in argv)
+    image_index = argv.index("python:3.12-slim")
+    assert argv[image_index + 1:] == ("git", "status")

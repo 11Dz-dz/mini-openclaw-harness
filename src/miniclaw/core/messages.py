@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, TypeAlias
 
 Role: TypeAlias = Literal["system", "user", "assistant", "tool"]
@@ -21,6 +21,7 @@ class ToolResultContent:
     tool_call_id: str
     output: str
     is_error: bool = False
+    execution_id: str | None = None
 
 
 Content: TypeAlias = TextContent | ToolCall | ToolResultContent
@@ -30,6 +31,8 @@ Content: TypeAlias = TextContent | ToolCall | ToolResultContent
 class Message:
     role: Role
     content: tuple[Content, ...]
+    # Provider protocol state, not user-visible answer text or audit output.
+    reasoning_content: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,11 +41,17 @@ class ModelRequest:
     messages: tuple[Message, ...]
     tools: tuple[dict[str, object], ...] = ()
     temperature: float = 0.0
+    max_output_tokens: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class TextDelta:
     text: str
+
+
+@dataclass(frozen=True, slots=True)
+class ReasoningDelta:
+    text: str = field(repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,4 +74,4 @@ class ResponseCompleted:
     usage: Usage | None = None
 
 
-ModelEvent: TypeAlias = TextDelta | ToolCallDelta | ResponseCompleted
+ModelEvent: TypeAlias = TextDelta | ReasoningDelta | ToolCallDelta | ResponseCompleted | Usage

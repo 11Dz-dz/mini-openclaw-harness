@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from miniclaw.context.types import ContextSource
 from miniclaw.skills.context import skills_context
 from miniclaw.skills.matcher import SkillMatcher
@@ -19,7 +21,10 @@ class SkillContextProvider:
     async def build(self, prompt: str) -> tuple[ContextSource, ...]:
         if not self.skills:
             return ()
-        matches = self.matcher.match(prompt).select(self.skills)
+        query = self.matcher.match(prompt)
+        matches = query.select(self.skills)
         if not matches:
             return ()
-        return (skills_context(matches),)
+        return tuple(replace(skills_context((match,)),
+            source_id=f'skills:{match.skill.source_id}:{match.skill.name}',
+            required=query.explicit is not None) for match in matches)

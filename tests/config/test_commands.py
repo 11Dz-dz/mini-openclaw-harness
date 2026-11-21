@@ -139,6 +139,8 @@ def test_config_show_stdout_matches_display_golden(
         'base_url = "not configured"\n'
         'api_key = "not configured"\n'
         "require_strong_sandbox = false\n"
+        'execution_mode = "auto"\n'
+        'trusted_user = "miniclaw-runner"\n'
         'docker_image = "python:3.12-slim"\n'
         "max_turns = 16\n"
         "max_tool_calls = 32\n"

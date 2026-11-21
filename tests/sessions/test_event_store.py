@@ -28,7 +28,9 @@ async def test_event_store_is_ordered_and_idempotent(tmp_path: Path) -> None:
     await store.append(first)
     await store.append(first)
 
-    assert await store.load() == (first,)
+    stored, = await store.load()
+    assert stored.event_id == first.event_id
+    assert stored.payload.prompt == '<omitted>'
 
 
 async def test_event_store_rejects_sequence_gap(tmp_path: Path) -> None:
@@ -54,5 +56,5 @@ async def test_event_store_sequence_is_scoped_to_run(tmp_path: Path) -> None:
     await store.append(first)
     await store.append(second_run)
 
-    assert await store.load() == (first, second_run)
+    assert [e.event_id for e in await store.load()] == [first.event_id, second_run.event_id]
 
