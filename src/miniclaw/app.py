@@ -180,6 +180,7 @@ class MiniClawApp:
         trace_sinks=(),
         required_artifacts: tuple[str, ...] = (),
         verification_command: tuple[str, ...] = (),
+        force_artifact_tool: bool = False,
     ) -> RunResult:
         # This command is set by the embedding caller. Nothing in the model
         # response can select it, change its arguments or supply environment values.
@@ -208,6 +209,7 @@ class MiniClawApp:
             trace_sinks=trace_sinks,
             required_artifacts=required_artifacts,
             completion_check=verify if verification_command else None,
+            force_artifact_tool=force_artifact_tool,
         )
         self.session_id = self.last_result.session_id
         self.conversation = self.last_result.messages
@@ -710,6 +712,8 @@ async def create_app(
     approval_provider: ApprovalProvider | None = None,
     unattended_approved_tools: tuple[str, ...] = DEFAULT_UNATTENDED_APPROVED_TOOLS,
     docker_workspace_aliases: tuple[str, ...] = (),
+    coding_tools: bool = False,
+    strip_previous_turn_reasoning: bool = False,
 ) -> MiniClawApp:
     validate_config_values({"execution_mode": config.execution_mode, "trusted_user": config.trusted_user,
                             "require_strong_sandbox": config.require_strong_sandbox})
@@ -852,28 +856,33 @@ async def create_app(
                         tool.spec.name,
                         sandbox.unavailable_reason or "isolated execution is unavailable",
                     )
-        search_endpoint = load_search_endpoint(config.workspace)
-        web_tools, web_closeables = make_web_tools(
-            search_endpoint=search_endpoint,
-            # Only ask for a credential that has somewhere to be used.
-            search_api_key=(
-                (secret_provider or EnvironmentSecretProvider()).get(
-                    SEARCH_API_KEY_VARIABLE
-                )
-                if search_endpoint is not None
-                else None
-            ),
-        )
-        for tool in web_tools:
-            tools.register(tool)
-        mcp_clients, mcp_status = await _start_mcp_servers(
-            tools, config.workspace, approval_provider=resolved_approval,
-            execution_workspace=workspace_session.workspace,
-            sandbox=docker_sandbox,
-            isolation_unavailable=("MCP requires an isolated backend; trusted host execution only enables Shell/Git"
-                                   if trusted_executor else sandbox.unavailable_reason
-                                   if selected_sandbox is None else None),
-        )
+        if coding_tools:
+            for tool in tools.values():
+                if tool.spec.name not in {
+                    "read_file", "write_file", "replace_text", "run_command", "git_status", "git_diff", "git_log", "git_show",
+                }:
+                    tools.disable(tool.spec.name, "outside the coding tool profile")
+            web_closeables, mcp_clients, mcp_status = (), (), ()
+        else:
+            search_endpoint = load_search_endpoint(config.workspace)
+            web_tools, web_closeables = make_web_tools(
+                search_endpoint=search_endpoint,
+                # Only ask for a credential that has somewhere to be used.
+                search_api_key=(
+                    (secret_provider or EnvironmentSecretProvider()).get(SEARCH_API_KEY_VARIABLE)
+                    if search_endpoint is not None else None
+                ),
+            )
+            for tool in web_tools:
+                tools.register(tool)
+            mcp_clients, mcp_status = await _start_mcp_servers(
+                tools, config.workspace, approval_provider=resolved_approval,
+                execution_workspace=workspace_session.workspace,
+                sandbox=docker_sandbox,
+                isolation_unavailable=("MCP requires an isolated backend; trusted host execution only enables Shell/Git"
+                                       if trusted_executor else sandbox.unavailable_reason
+                                       if selected_sandbox is None else None),
+            )
         child_factory.tools = tools
 
         agent = AgentLoop(
@@ -891,6 +900,7 @@ async def create_app(
             approval_provider=resolved_approval,
             trace_sinks=(trace_sink,),
             context_providers=context_providers,
+            strip_previous_turn_reasoning=strip_previous_turn_reasoning,
         )
         # Scheduled work runs without a human, so it gets its own loop whose
         # approval provider denies anything the policy wants to ask about.
@@ -919,6 +929,7 @@ async def create_app(
             approval_provider=UnattendedApprovalProvider(unattended_approved_tools),
             trace_sinks=(trace_sink,),
             context_providers=context_providers,
+            strip_previous_turn_reasoning=strip_previous_turn_reasoning,
         )
         scheduler_runtime = SchedulerRuntime(
             scheduler,

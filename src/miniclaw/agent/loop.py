@@ -88,6 +88,21 @@ class ModelStreamStarted:
 
 
 @dataclass(frozen=True, slots=True)
+class ModelResponseFinished:
+    turn: int
+    reason: str
+    reasoning_tokens: int | None
+    reasoning_chars: int
+    visible_chars: int
+    tool_fragments: int
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactsReady:
+    turn: int
+
+
+@dataclass(frozen=True, slots=True)
 class RunCompleted:
     output: str
 
@@ -186,6 +201,7 @@ class AgentLoop:
         approval_provider: InMemoryApprovalProvider | None = None,
         trace_sinks: tuple[TraceSink, ...] = (),
         context_providers: tuple["ContextProvider", ...] = (),
+        strip_previous_turn_reasoning: bool = False,
     ) -> None:
         self.provider = provider
         self.model = model
@@ -209,6 +225,7 @@ class AgentLoop:
         self.approval_provider = approval_provider
         self.trace_sinks = trace_sinks
         self.context_providers = context_providers
+        self.strip_previous_turn_reasoning = strip_previous_turn_reasoning
 
     async def run(
         self,
@@ -219,11 +236,13 @@ class AgentLoop:
         trace_sinks: tuple[TraceSink, ...] = (),
         required_artifacts: tuple[str, ...] = (),
         completion_check: CompletionCheck | None = None,
+        force_artifact_tool: bool = False,
     ) -> RunResult:
         run_id = str(uuid4())
         session_id = session_id or str(uuid4())
         events: list[EventEnvelope] = []
         messages = [*history, Message("user", (TextContent(prompt),))]
+        previous_message_count = len(history)
         status = RunStatus.CREATED
 
         completed_tool_executions: list[str] = []
@@ -309,6 +328,11 @@ class AgentLoop:
             completion_corrections = 0
             output_truncation_retries = 0
             next_feedback: ContextSource | None = None
+            completion_feedback: list[ContextSource] = []
+            workspace = self.workspace or Path.cwd()
+            artifacts_ready = not required_artifacts or not _missing_artifacts(workspace, required_artifacts)
+            if artifacts_ready and required_artifacts:
+                await emit(ArtifactsReady(0))
             for turn in range(1, self.limits.max_turns + 1):
                 if status in {
                     RunStatus.RECORDING_RESULTS,
@@ -316,20 +340,38 @@ class AgentLoop:
                 } or status is RunStatus.CREATED:
                     status = transition(status, RunStatus.BUILDING_CONTEXT)
                 request_messages = tuple(messages)
-                round_sources = extra_sources
+                if self.strip_previous_turn_reasoning:
+                    request_messages = (*(
+                        replace(message, reasoning_content=None) if message.reasoning_content is not None else message
+                        for message in messages[:previous_message_count]
+                    ), *messages[previous_message_count:])
+                tools = self.tools.specs() if self.tools else ()
+                tool_choice = "required" if (force_artifact_tool and tools and next_feedback is not None
+                                             and next_feedback.source_id == "model:missing-artifacts") else None
+                active_feedback = list(completion_feedback)
                 if next_feedback is not None:
-                    round_sources = (*round_sources, next_feedback)
+                    if not active_feedback or active_feedback[-1] != next_feedback:
+                        active_feedback.append(next_feedback)
                     next_feedback = None
+                feedback_text = "\n".join(f"- {item.text}" for item in active_feedback[-2:])
+                feedback_message = (Message("user", (TextContent(
+                    "[Harness follow-up for the current task]\n" + feedback_text),)) if feedback_text else None)
+                # Budget the tail separately so the original task stays required.
+                round_sources = extra_sources
+                if feedback_message is not None:
+                    round_sources = (*round_sources, ContextSource(
+                        "harness:feedback-tail", feedback_text, priority=100, required=True))
                 selected_extra = round_sources
                 if self.context_builder is not None and self.context_budget is not None:
                     overhead = self.context_builder.estimator.estimate(json.dumps(
                         encode_request(ModelRequest(
-                            self.model, (), self.tools.specs() if self.tools else (),
-                            max_output_tokens=self.context_budget.reserve_output), stream=True),
+                            self.model, (), tools, max_output_tokens=self.context_budget.reserve_output,
+                            tool_choice=tool_choice), stream=True),
                         ensure_ascii=False, separators=(",", ":")))
                     history = request_messages
                     budget_sources = tuple(replace(source, token_text=json.dumps(encode_message(
-                            Message("system", (TextContent(source.text),))),
+                            feedback_message if source.source_id == "harness:feedback-tail"
+                            else Message("system", (TextContent(source.text),))),
                             ensure_ascii=False)) for source in round_sources)
                     context_snapshot, request_messages = select_request_history(
                         self.context_builder, history, budget_sources,
@@ -368,17 +410,23 @@ class AgentLoop:
                         for index, message in enumerate(request_messages)
                         if index in selected_indices
                     )
-                if selected_extra:
+                head_sources = tuple(item for item in selected_extra if item.source_id != "harness:feedback-tail")
+                if head_sources:
                     request_messages = (
                         Message(
                             "system",
                             tuple(
-                                TextContent(item.text) for item in selected_extra
+                            TextContent(item.text) for item in head_sources
                             ),
                         ),
                         *request_messages,
                     )
-                    await emit(ContextInjected(tuple(source.source_id for source in selected_extra)))
+                if feedback_message is not None:
+                    request_messages = (*request_messages, feedback_message)
+                injected = tuple(source.source_id for source in head_sources) + tuple(
+                    dict.fromkeys(source.source_id for source in active_feedback[-2:]))
+                if injected:
+                    await emit(ContextInjected(injected))
                 await emit(
                     ContextBuilt(
                         len(request_messages),
@@ -402,13 +450,17 @@ class AgentLoop:
                 assembler = ToolCallAssembler()
                 assembly_error: ToolArgumentsInvalid | None = None
                 finish_reason: str | None = None
+                tool_fragments = 0
+                pending_tool_names: set[str] = set()
+                available_tool_names = {spec["function"]["name"] for spec in tools}
                 async for event in self.provider.stream(
                     ModelRequest(
                         self.model,
                         request_messages,
-                        self.tools.specs() if self.tools is not None else (),
+                        tools,
                         max_output_tokens=(self.context_budget.reserve_output
                                            if self.context_budget else None),
+                        tool_choice=tool_choice,
                     )
                 ):
                     if isinstance(event, TextDelta):
@@ -419,6 +471,9 @@ class AgentLoop:
                         # exposing it as an answer or recording it in audit streams.
                         reasoning.append(event.text)
                     elif isinstance(event, ToolCallDelta):
+                        tool_fragments += 1
+                        if event.name in available_tool_names:
+                            pending_tool_names.add(event.name)
                         if assembly_error is None:
                             try:
                                 assembler.feed(event)
@@ -429,10 +484,14 @@ class AgentLoop:
                         finish_reason = event.finish_reason
                         if event.usage is not None:
                             await emit(ModelUsage(event.usage.input_tokens, event.usage.output_tokens))
+                        await emit(ModelResponseFinished(
+                            turn, finish_reason if finish_reason in {"stop", "length", "tool_calls", "content_filter"}
+                            else "other", event.usage.reasoning_tokens if event.usage else None,
+                            sum(map(len, reasoning)), sum(map(len, answer)), tool_fragments,
+                        ))
                         break
                 failure_reason = "model did not complete a usable response"
                 if finish_reason == "stop":
-                    workspace = self.workspace or Path.cwd()
                     missing = _missing_artifacts(workspace, required_artifacts)
                     completion_error = None
                     source_id = "model:missing-artifacts"
@@ -449,11 +508,14 @@ class AgentLoop:
                             completion_corrections += 1
                             next_feedback = ContextSource(
                                 source_id,
-                                f"Task is still incomplete. {failure_reason}. "
-                                "Continue from the current workspace and address the reported problem.",
+                                f"Check {completion_corrections} failed. {failure_reason}. "
+                                + ("Use a file or command tool now to create the missing required files. " if missing
+                                   else "Use a workspace tool now to inspect or change the failing deliverable. ")
+                                + "Continue from the current workspace and run a focused check before a final answer.",
                                 priority=100,
                                 required=True,
                             )
+                            completion_feedback.append(next_feedback)
                     else:
                         output = "".join(answer)
                         messages.append(Message("assistant", (TextContent(output),),
@@ -469,7 +531,11 @@ class AgentLoop:
                     if (turn < self.limits.max_turns
                             and output_truncation_retries < self.limits.max_output_truncation_retries):
                         output_truncation_retries += 1
-                        next_feedback = OUTPUT_TRUNCATION_CORRECTION
+                        detail = (" Interrupted tools: " + ", ".join(sorted(pending_tool_names)) + "."
+                                  if pending_tool_names else
+                                  " No tool started. Make one focused tool call before further analysis.")
+                        next_feedback = replace(OUTPUT_TRUNCATION_CORRECTION,
+                                                text=OUTPUT_TRUNCATION_CORRECTION.text + detail)
                 if next_feedback is not None:
                     status = transition(status, RunStatus.BUILDING_CONTEXT)
                     continue
@@ -609,6 +675,9 @@ class AgentLoop:
                     await checkpoint()
                 if status is RunStatus.EXECUTING_TOOLS:
                     status = transition(status, RunStatus.RECORDING_RESULTS)
+                if not artifacts_ready and not _missing_artifacts(workspace, required_artifacts):
+                    artifacts_ready = True
+                    await emit(ArtifactsReady(turn))
             status = transition(status, RunStatus.EXHAUSTED)
             await checkpoint()
             return RunResult(

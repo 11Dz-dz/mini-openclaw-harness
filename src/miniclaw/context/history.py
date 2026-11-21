@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from dataclasses import replace
 
 from miniclaw.context.builder import sources_from_messages
@@ -64,6 +65,22 @@ def _result_excerpt(output, limit):
     return output[:half] + '\n[...]\n' + output[-half:]
 
 
+def _command_excerpt(argv: list, redactor: Redactor) -> list:
+    executable = redactor.redact(argv[0][:80])
+    pytest = argv[0] == 'pytest' or (argv[0] in {'python', 'python3'} and argv[1:3] == ['-m', 'pytest'])
+    result = [executable]
+    for index, value in enumerate(argv[1:9], start=1):
+        if not isinstance(value, str):
+            result.append('<arg>')
+        elif re.fullmatch(r'-{1,2}[A-Za-z][A-Za-z-]{0,39}', value):
+            result.append(value)
+        elif pytest and (value == 'pytest' and index == 2 or re.fullmatch(r'(?:tests/)?[\w./-]+\.py(?:::[\w.-]+)?', value)):
+            result.append(redactor.redact(value[:100]))
+        else:
+            result.append('<arg>')
+    return result
+
+
 def compact_dropped_history(messages, dropped, estimator, target_tokens):
     """Extract bounded original snippets; never manufacture a factual summary.
 
@@ -87,6 +104,11 @@ def compact_dropped_history(messages, dropped, estimator, target_tokens):
                 path = item.arguments.get('path')
                 if item.name in {'read_file', 'write_file', 'replace_text', 'git_diff'} and isinstance(path, str):
                     entry['path'] = redactor.redact(path[:160])
+                elif item.name == 'run_command':
+                    argv = item.arguments.get('argv')
+                    if isinstance(argv, list) and argv and isinstance(argv[0], str):
+                        # Summarize the invocation without copying embedded code or credentials.
+                        entry['argv'] = _command_excerpt(argv, redactor)
                 content.append(entry)
             elif isinstance(item, ToolResultContent):
                 content.append({'kind': 'tool_result', 'id': item.tool_call_id,

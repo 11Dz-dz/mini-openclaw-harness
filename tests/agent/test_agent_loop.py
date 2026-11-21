@@ -20,6 +20,7 @@ async def test_agent_loop_completes_with_text() -> None:
         "ContextBuilt",
         "ModelStreamStarted",
         "TextDelta",
+        "ModelResponseFinished",
         "RunCompleted",
         "RunEnded",
     ]

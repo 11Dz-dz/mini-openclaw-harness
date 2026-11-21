@@ -63,6 +63,8 @@ def encode_request(request: ModelRequest, *, stream: bool) -> dict[str, object]:
     }
     if request.tools:
         payload["tools"] = list(request.tools)
+        if request.tool_choice is not None:
+            payload["tool_choice"] = request.tool_choice
     if stream:
         payload['stream_options'] = {'include_usage': True}
     if request.max_output_tokens is not None:

@@ -42,6 +42,7 @@ class ModelRequest:
     tools: tuple[dict[str, object], ...] = ()
     temperature: float = 0.0
     max_output_tokens: int | None = None
+    tool_choice: Literal["required"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +67,7 @@ class ToolCallDelta:
 class Usage:
     input_tokens: int
     output_tokens: int
+    reasoning_tokens: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -10,8 +10,9 @@ from miniclaw.context.builder import ContextBuilder
 from miniclaw.context.tokens import CharacterTokenEstimator
 from miniclaw.context.types import ContextBudget
 from miniclaw.core.errors import AuthenticationError
-from miniclaw.core.messages import ResponseCompleted, TextDelta, ToolCallDelta
+from miniclaw.core.messages import Message, ReasoningDelta, ResponseCompleted, TextContent, TextDelta, ToolCallDelta
 from miniclaw.model.scripted import ScriptedModel
+from miniclaw.observability.metrics import metrics_from_events
 from miniclaw.permissions.policy import DefaultPermissionPolicy
 from miniclaw.sandbox.capabilities import SandboxCapabilities, SandboxStrength
 from miniclaw.sandbox.types import SandboxResult
@@ -42,7 +43,10 @@ async def test_output_truncation_discards_the_entire_batch_and_recovers(tmp_path
         assert (workspace / 'earlier').read_text() == 'keep'
         assert (workspace / 'corrected').read_text() == 'yes'
         assert any(event.payload == ContextInjected(('model:output-truncation',)) for event in result.events)
-        assert [message.role for message in model.requests[2].messages] == ['system', 'user', 'assistant', 'tool']
+        assert [message.role for message in model.requests[2].messages] == ['user', 'assistant', 'tool', 'user']
+        feedback = model.requests[2].messages[-1].content[0].text
+        assert 'Interrupted tools: write_file' in feedback
+        assert metrics_from_events(result.events).truncated_responses == 1
         assert 'discard this' not in repr(model.requests[2].messages)
         checkpoint = await app.checkpoints.latest_for_run(result.run_id)
         assert checkpoint.messages == result.messages
@@ -76,12 +80,15 @@ async def test_missing_artifact_continues_with_the_missing_path(tmp_path):
     workspace = app.workspace_session.workspace
     (workspace / 'existing.txt').write_text('already generated')
     try:
-        result = await app.run_prompt('write files', required_artifacts=('existing.txt', 'result.json'))
+        result = await app.run_prompt('write files', required_artifacts=('existing.txt', 'result.json'), force_artifact_tool=True)
         assert result.status is RunStatus.COMPLETED
-        feedback = model.requests[1].messages[0].content[0].text
+        feedback = model.requests[1].messages[-1].content[0].text
+        assert model.requests[1].tool_choice == 'required'
+        assert model.requests[0].tool_choice is None and model.requests[2].tool_choice is None
         assert 'result.json' in feedback and 'existing.txt' not in feedback
         assert 'premature completion' not in repr(result.messages)
         assert (workspace / 'result.json').read_text() == '[]'
+        assert metrics_from_events(result.events).first_artifact_turn == 2
     finally:
         await app.aclose()
 
@@ -99,6 +106,28 @@ async def test_missing_artifacts_cannot_be_satisfied_outside_workspace_or_by_a_d
     assert len(model.requests) == 3
     assert 'directory' in result.output and '../outside.txt' in result.output
     assert [message.role for message in result.messages] == ['user']
+
+
+async def test_cross_turn_reasoning_removal_keeps_current_tool_protocol(tmp_path):
+    history = (Message('user', (TextContent('prior question'),)),
+               Message('assistant', (TextContent('prior answer'),), 'prior reasoning'))
+    model = ScriptedModel((
+        (ReasoningDelta('current reasoning'), ToolCallDelta(0, 'read', 'read_file', '{"path":"file"}'),
+         ResponseCompleted('tool_calls')),
+        (TextDelta('done'), ResponseCompleted('stop')),
+    ))
+    app = await create_app(MiniClawConfig(tmp_path / 'data', tmp_path / 'project'), provider=model,
+                           coding_tools=True, strip_previous_turn_reasoning=True)
+    try:
+        (app.workspace_session.workspace / 'file').write_text('file contents')
+        result = await app.agent.run('current question', history=history)
+        assert result.status is RunStatus.COMPLETED
+        assert model.requests[0].messages[1].reasoning_content is None
+        assert model.requests[1].messages[3].reasoning_content == 'current reasoning'
+        assert result.messages[1].reasoning_content == 'prior reasoning'
+        assert 'remember' not in {spec['function']['name'] for spec in model.requests[0].tools}
+    finally:
+        await app.aclose()
 
 
 async def test_docker_verification_runs_after_artifacts_exist_and_can_request_a_fix(tmp_path, monkeypatch):
@@ -143,7 +172,8 @@ async def test_docker_verification_runs_after_artifacts_exist_and_can_request_a_
         assert len(checks) == 2
         assert [event.payload.passed for event in result.events
                 if isinstance(event.payload, CompletionChecked)] == [False, True]
-        assert 'expected a JSON list' in model.requests[3].messages[0].content[0].text
+        assert 'expected a JSON list' in model.requests[3].messages[-1].content[0].text
+        assert 'Check 1 failed' in model.requests[3].messages[-1].content[0].text
         assert not (app.config.workspace / 'result.json').exists()
     finally:
         await app.aclose()
@@ -173,8 +203,8 @@ async def test_invalid_batch_never_executes_and_model_can_correct_it(tmp_path, m
         assert result.status is RunStatus.COMPLETED
         assert not (workspace / 'unreviewed').exists()
         assert (workspace / 'corrected').read_text() == 'yes'
-        assert [message.role for message in model.requests[1].messages] == ['system', 'user']
-        assert 'None of its calls ran.' in model.requests[1].messages[0].content[0].text
+        assert [message.role for message in model.requests[1].messages] == ['user', 'user']
+        assert 'None of its calls ran.' in model.requests[1].messages[-1].content[0].text
         assert not any(message.role == 'system' for message in result.messages)
         assert [message.role for message in result.messages] == ['user', 'assistant', 'tool', 'assistant']
     finally:

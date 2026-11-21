@@ -80,4 +80,7 @@ def _usage(raw):
             or type(raw.get('completion_tokens')) is not int
             or min(raw['prompt_tokens'], raw['completion_tokens']) < 0):
         raise ModelProtocolError('invalid streaming usage')
-    return Usage(raw['prompt_tokens'], raw['completion_tokens'])
+    details = raw.get('completion_tokens_details')
+    reasoning = details.get('reasoning_tokens') if isinstance(details, dict) else None
+    return Usage(raw['prompt_tokens'], raw['completion_tokens'],
+                 reasoning if type(reasoning) is int and reasoning >= 0 else None)
