@@ -10,7 +10,14 @@ from miniclaw.context.builder import ContextBuilder
 from miniclaw.context.tokens import CharacterTokenEstimator
 from miniclaw.context.types import ContextBudget
 from miniclaw.core.errors import AuthenticationError
-from miniclaw.core.messages import Message, ReasoningDelta, ResponseCompleted, TextContent, TextDelta, ToolCallDelta
+from miniclaw.core.messages import (
+    Message,
+    ReasoningDelta,
+    ResponseCompleted,
+    TextContent,
+    TextDelta,
+    ToolCallDelta,
+)
 from miniclaw.model.scripted import ScriptedModel
 from miniclaw.observability.metrics import metrics_from_events
 from miniclaw.permissions.policy import DefaultPermissionPolicy
