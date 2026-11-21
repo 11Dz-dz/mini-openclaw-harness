@@ -219,6 +219,8 @@ def _event_payload_types() -> dict[str, type]:
         RunEnded,
         RunFailed,
         RunStarted,
+        VerificationStalled,
+        WorkspaceVerified,
     )
     from miniclaw.workspace.session import ArtifactApplied
 
@@ -241,6 +243,8 @@ def _event_payload_types() -> dict[str, type]:
             RunFailed,
             RunEnded,
             RunCancelled,
+            VerificationStalled,
+            WorkspaceVerified,
             ArtifactApplied,
         )
     }

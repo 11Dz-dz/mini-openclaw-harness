@@ -15,3 +15,5 @@ class RunMetrics:
     truncations_without_tool_fragments: int = 0
     history_compaction_rounds: int = 0
     reasoning_tokens: int | None = None
+    workspace_verifications: int = 0
+    verification_stalls: int = 0

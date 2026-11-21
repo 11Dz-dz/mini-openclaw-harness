@@ -150,7 +150,7 @@ async def test_docker_verification_runs_after_artifacts_exist_and_can_request_a_
         assert command.argv == ('python', '-c', 'trusted check')
         assert command.cwd == policy.workspace
         valid = (command.cwd / 'result.json').read_text() == '[]'
-        return SandboxResult(0 if valid else 1, 'expected a JSON list', '', ())
+        return SandboxResult(0 if valid else 1, 'checker started', 'expected a JSON list', ())
 
     monkeypatch.setattr('miniclaw.sandbox.docker.DockerSandbox.capabilities', docker_available)
     monkeypatch.setattr('miniclaw.sandbox.docker.DockerSandbox.execute', verify)
@@ -180,10 +180,35 @@ async def test_docker_verification_runs_after_artifacts_exist_and_can_request_a_
         assert [event.payload.passed for event in result.events
                 if isinstance(event.payload, CompletionChecked)] == [False, True]
         assert 'expected a JSON list' in model.requests[3].messages[-1].content[0].text
+        assert 'checker started' in model.requests[3].messages[-1].content[0].text
         assert 'Check 1 failed' in model.requests[3].messages[-1].content[0].text
         assert not (app.config.workspace / 'result.json').exists()
     finally:
         await app.aclose()
+
+
+async def test_run_local_active_verification_detects_identical_failure(tmp_path):
+    model = ScriptedModel((
+        (ToolCallDelta(0, 'check-1', 'verify_workspace', '{}'), ResponseCompleted('tool_calls')),
+        (ToolCallDelta(0, 'check-2', 'verify_workspace', '{}'), ResponseCompleted('tool_calls')),
+        (TextDelta('fixed'), ResponseCompleted('stop')),
+    ))
+    checks = iter(('cost too high', 'cost too high', None))
+
+    async def verify(path):
+        assert path == tmp_path
+        return next(checks)
+
+    registry = ToolRegistry()
+    result = await AgentLoop(model, 'fake', workspace=tmp_path, tools=registry,
+                             permission_policy=DefaultPermissionPolicy()).run(
+        'produce a plan', completion_check=verify, active_verification=True, pivot_on_stall=True,
+    )
+    assert result.status is RunStatus.COMPLETED
+    assert 'Choose a different approach' in result.messages[-2].content[0].output
+    assert not registry.specs()
+    metrics = metrics_from_events(result.events)
+    assert (metrics.workspace_verifications, metrics.verification_stalls) == (2, 1)
 
 
 @pytest.mark.parametrize("malformed", [

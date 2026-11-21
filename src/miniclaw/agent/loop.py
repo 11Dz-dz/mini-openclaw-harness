@@ -46,7 +46,7 @@ from miniclaw.sessions.types import Checkpoint, RunRecord, SessionRecord
 from miniclaw.tools.assembler import ToolCallAssembler
 from miniclaw.tools.executor import ToolExecutor
 from miniclaw.tools.registry import ToolRegistry
-from miniclaw.tools.types import ToolContext
+from miniclaw.tools.types import RegisteredTool, ToolCapabilities, ToolContext, ToolSpec
 from miniclaw.workspace.paths import WorkspaceEscape, resolve_workspace_path
 
 MAX_TOOL_CALL_CORRECTIONS = 2
@@ -110,6 +110,16 @@ class RunCompleted:
 @dataclass(frozen=True, slots=True)
 class CompletionChecked:
     passed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceVerified:
+    passed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class VerificationStalled:
+    consecutive_checks: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,6 +247,8 @@ class AgentLoop:
         required_artifacts: tuple[str, ...] = (),
         completion_check: CompletionCheck | None = None,
         force_artifact_tool: bool = False,
+        active_verification: bool = False,
+        pivot_on_stall: bool = False,
     ) -> RunResult:
         run_id = str(uuid4())
         session_id = session_id or str(uuid4())
@@ -286,6 +298,44 @@ class AgentLoop:
                 )
             )
 
+        last_check_error: str | None = None
+        same_failed_checks = 0
+        completion_feedback: list[ContextSource] = []
+
+        async def check_workspace(workspace: Path, *, on_demand: bool) -> str | None:
+            nonlocal last_check_error, same_failed_checks
+            assert completion_check is not None
+            error = await completion_check(workspace)
+            await emit(WorkspaceVerified(error is None) if on_demand else CompletionChecked(error is None))
+            if error is None:
+                completion_feedback.clear()
+            same_failed_checks = ((same_failed_checks + 1 if error == last_check_error else 1)
+                                  if error is not None else 0)
+            last_check_error = error
+            if error is not None and pivot_on_stall and same_failed_checks >= 2:
+                if same_failed_checks == 2:
+                    await emit(VerificationStalled(same_failed_checks))
+                return (error + " The check returned the same failure twice. Choose a different approach "
+                        "that targets a failing constraint. Make one focused change and check its effect.")
+            return error
+
+        registry, executor = self.tools, self.tool_executor
+        if active_verification and completion_check is not None:
+            async def verify_tool(_arguments, context):
+                error = await check_workspace(context.workspace, on_demand=True)
+                return error if error is not None else "The configured workspace check passed."
+
+            registry = (registry.subset(tuple(tool.spec.name for tool in registry.values()))
+                        if registry is not None else ToolRegistry())
+            registry.register(RegisteredTool(ToolSpec(
+                "verify_workspace",
+                "Run the configured read-only delivery check on the current workspace. "
+                "Use it after creating or changing deliverables to compare results before completion.",
+                {"type": "object", "properties": {}, "additionalProperties": False},
+                ToolCapabilities(filesystem="read", subprocess=True),
+            ), verify_tool))
+            executor = ToolExecutor(registry, executor.sandbox_router if executor is not None else None)
+
         if self.session_repository is not None:
             now = self.clock()
             if await self.session_repository.get_session(session_id) is None:
@@ -328,7 +378,6 @@ class AgentLoop:
             completion_corrections = 0
             output_truncation_retries = 0
             next_feedback: ContextSource | None = None
-            completion_feedback: list[ContextSource] = []
             workspace = self.workspace or Path.cwd()
             artifacts_ready = not required_artifacts or not _missing_artifacts(workspace, required_artifacts)
             if artifacts_ready and required_artifacts:
@@ -345,7 +394,7 @@ class AgentLoop:
                         replace(message, reasoning_content=None) if message.reasoning_content is not None else message
                         for message in messages[:previous_message_count]
                     ), *messages[previous_message_count:])
-                tools = self.tools.specs() if self.tools else ()
+                tools = registry.specs() if registry else ()
                 tool_choice = "required" if (force_artifact_tool and tools and next_feedback is not None
                                              and next_feedback.source_id == "model:missing-artifacts") else None
                 active_feedback = list(completion_feedback)
@@ -498,8 +547,7 @@ class AgentLoop:
                     if missing:
                         completion_error = f"required workspace files missing: {json.dumps(missing)}"
                     elif completion_check is not None:
-                        completion_error = await completion_check(workspace)
-                        await emit(CompletionChecked(completion_error is None))
+                        completion_error = await check_workspace(workspace, on_demand=False)
                         source_id = "model:verification-failed"
                     if completion_error is not None:
                         failure_reason = completion_error
@@ -539,7 +587,7 @@ class AgentLoop:
                 if next_feedback is not None:
                     status = transition(status, RunStatus.BUILDING_CONTEXT)
                     continue
-                if finish_reason != "tool_calls" or self.tool_executor is None:
+                if finish_reason != "tool_calls" or executor is None:
                     status = transition(status, RunStatus.FAILED)
                     await emit(RunFailed(failure_reason))
                     await checkpoint()
@@ -596,13 +644,13 @@ class AgentLoop:
                     # Approval cannot provide a missing isolation capability.
                     # ToolExecutor refuses unavailable calls before dispatch.
                     unavailable = (
-                        self.tools is not None
-                        and self.tools.disabled_reason(call.name) is not None
+                        registry is not None
+                        and registry.disabled_reason(call.name) is not None
                     )
                     registered = None
-                    if self.tools is not None:
+                    if registry is not None:
                         with contextlib.suppress(ToolNotFound):
-                            registered = self.tools.get(call.name)
+                            registered = registry.get(call.name)
                     if (self.permission_policy is not None and not unavailable
                             and registered is not None):
                         evaluation = self.permission_policy.evaluate(
@@ -665,7 +713,7 @@ class AgentLoop:
                 status = transition(status, target)
                 for call, allowed in decisions:
                     if allowed:
-                        result = await self.tool_executor.execute(call, context)
+                        result = await executor.execute(call, context)
                     else:
                         result = ToolResultContent(call.id, "permission denied", is_error=True)
                     tool_calls_used += 1

@@ -8,6 +8,8 @@ from miniclaw.agent.loop import (
     ModelUsage,
     RunCompleted,
     RunEnded,
+    VerificationStalled,
+    WorkspaceVerified,
 )
 from miniclaw.core.events import EventEnvelope
 from miniclaw.observability.types import RunMetrics
@@ -47,4 +49,6 @@ def metrics_from_events(events: tuple[EventEnvelope, ...]) -> RunMetrics:
         reasoning_tokens=(sum(item.reasoning_tokens for item in responses)
                           if requests and len(responses) == requests
                           and all(item.reasoning_tokens is not None for item in responses) else None),
+        workspace_verifications=sum(isinstance(event.payload, WorkspaceVerified) for event in events),
+        verification_stalls=sum(isinstance(event.payload, VerificationStalled) for event in events),
     )
