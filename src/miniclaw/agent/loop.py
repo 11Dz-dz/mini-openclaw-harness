@@ -207,18 +207,6 @@ def _missing_artifacts(workspace: Path, required: tuple[str, ...]) -> tuple[str,
     return tuple(missing)
 
 
-def _recovery_tool_succeeded(call: ToolCall, result: ToolResultContent) -> bool:
-    if call.name not in REASONING_RECOVERY_TOOLS or result.is_error:
-        return False
-    if call.name == "write_file":
-        return True
-    try:
-        output = json.loads(result.output)
-    except ValueError:
-        return False
-    return isinstance(output, dict) and type(output.get("exit_code")) is int and output["exit_code"] == 0
-
-
 class AgentLoop:
     def __init__(
         self,
@@ -330,22 +318,27 @@ class AgentLoop:
 
         last_check_error: str | None = None
         same_failed_checks = 0
+        consecutive_failed_checks = 0
         completion_feedback: list[ContextSource] = []
 
         async def check_workspace(workspace: Path, *, on_demand: bool) -> str | None:
-            nonlocal last_check_error, same_failed_checks
+            nonlocal last_check_error, same_failed_checks, consecutive_failed_checks
             assert completion_check is not None
             error = await completion_check(workspace)
             await emit(WorkspaceVerified(error is None) if on_demand else CompletionChecked(error is None))
             if error is None:
                 completion_feedback.clear()
+            was_stalled = same_failed_checks >= 2 or consecutive_failed_checks >= 3
             same_failed_checks = ((same_failed_checks + 1 if error == last_check_error else 1)
                                   if error is not None else 0)
+            consecutive_failed_checks = consecutive_failed_checks + 1 if error is not None else 0
             last_check_error = error
-            if error is not None and pivot_on_stall and same_failed_checks >= 2:
-                if same_failed_checks == 2:
-                    await emit(VerificationStalled(same_failed_checks))
-                return (error + " The check returned the same failure twice. Choose a different approach "
+            if error is not None and pivot_on_stall and (same_failed_checks >= 2 or consecutive_failed_checks >= 3):
+                if not was_stalled:
+                    await emit(VerificationStalled(consecutive_failed_checks))
+                reason = ("The check returned the same failure twice. " if same_failed_checks >= 2
+                          else f"The workspace has failed {consecutive_failed_checks} consecutive checks. ")
+                return (error + " " + reason + "Choose a different approach "
                         "that targets a failing constraint. Make one focused change and check its effect.")
             return error
 
@@ -777,7 +770,7 @@ class AgentLoop:
                     messages.append(Message("tool", (result,)))
                     completed_tool_executions.append(result.tool_call_id)
                     await checkpoint()
-                    if recovery_tools and _recovery_tool_succeeded(call, result):
+                    if recovery_tools and call.name in REASONING_RECOVERY_TOOLS and not result.is_error:
                         recovered = True
                 if recovered:
                     reasoning_spin_streak = 0

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from miniclaw.agent.limits import RunLimits
@@ -25,6 +27,8 @@ from miniclaw.permissions.policy import DefaultPermissionPolicy
 from miniclaw.sandbox.capabilities import SandboxCapabilities, SandboxStrength
 from miniclaw.sandbox.types import SandboxResult
 from miniclaw.sessions.database import SessionRepository
+from miniclaw.tools.builtin.files import make_file_tools
+from miniclaw.tools.builtin.shell import make_run_command_tool
 from miniclaw.tools.registry import ToolRegistry
 
 
@@ -103,6 +107,32 @@ async def test_reasoning_recovery_suspends_thinking_until_a_tool_succeeds(tmp_pa
         assert (app.workspace_session.workspace / 'result.txt').read_text() == 'ok'
     finally:
         await app.aclose()
+
+
+async def test_reasoning_recovery_restores_tools_after_a_command_returns_test_failure(tmp_path):
+    class Sandbox:
+        async def execute(self, command, policy):
+            return SandboxResult(1, 'one test failed', '', ())
+
+    tools = ToolRegistry()
+    for tool in (*make_file_tools(), make_run_command_tool(Sandbox())):
+        tools.register(tool)
+    spin = (ReasoningDelta('private reasoning'), ResponseCompleted('length'))
+    model = ScriptedModel((
+        spin,
+        spin,
+        (ToolCallDelta(0, 'test', 'run_command', '{"argv":["pytest"]}'), ResponseCompleted('tool_calls')),
+        (TextDelta('done'), ResponseCompleted('stop')),
+    ))
+    result = await AgentLoop(model, 'fake', tools=tools, workspace=tmp_path,
+                             reasoning_circuit_breaker=True).run('run tests')
+    assert result.status is RunStatus.COMPLETED
+    assert model.requests[2].enable_thinking is False
+    assert model.requests[3].enable_thinking is None
+    assert 'read_file' in {tool['function']['name'] for tool in model.requests[3].tools}
+    tool_result = result.messages[2].content[0]
+    assert not tool_result.is_error and json.loads(tool_result.output)['exit_code'] == 1
+    assert metrics_from_events(result.events).reasoning_recoveries == 1
 
 
 async def test_truncated_tool_fragments_break_the_reasoning_spin_streak(tmp_path):
@@ -194,7 +224,8 @@ async def test_docker_verification_runs_after_artifacts_exist_and_can_request_a_
         assert command.argv == ('python', '-c', 'trusted check')
         assert command.cwd == policy.workspace
         valid = (command.cwd / 'result.json').read_text() == '[]'
-        return SandboxResult(0 if valid else 1, 'checker started', 'expected a JSON list', ())
+        stdout = 'older output ' * 150 + 'checker started' + ' progress' * 100
+        return SandboxResult(0 if valid else 1, stdout, 'expected a JSON list', ())
 
     monkeypatch.setattr('miniclaw.sandbox.docker.DockerSandbox.capabilities', docker_available)
     monkeypatch.setattr('miniclaw.sandbox.docker.DockerSandbox.execute', verify)
@@ -225,19 +256,23 @@ async def test_docker_verification_runs_after_artifacts_exist_and_can_request_a_
                 if isinstance(event.payload, CompletionChecked)] == [False, True]
         assert 'expected a JSON list' in model.requests[3].messages[-1].content[0].text
         assert 'checker started' in model.requests[3].messages[-1].content[0].text
+        assert 'older output ' * 60 not in model.requests[3].messages[-1].content[0].text
         assert 'Check 1 failed' in model.requests[3].messages[-1].content[0].text
         assert not (app.config.workspace / 'result.json').exists()
     finally:
         await app.aclose()
 
 
-async def test_run_local_active_verification_detects_identical_failure(tmp_path):
-    model = ScriptedModel((
-        (ToolCallDelta(0, 'check-1', 'verify_workspace', '{}'), ResponseCompleted('tool_calls')),
-        (ToolCallDelta(0, 'check-2', 'verify_workspace', '{}'), ResponseCompleted('tool_calls')),
-        (TextDelta('fixed'), ResponseCompleted('stop')),
-    ))
-    checks = iter(('cost too high', 'cost too high', None))
+@pytest.mark.parametrize(('failures', 'threshold'), [
+    (('cost 1.22x', 'cost 1.22x', 'cost 1.18x'), 2),
+    (('cost 1.22x', 'cost 1.18x', 'cost 1.17x'), 3),
+    (('cost 1.22x', None, 'cost 1.22x', 'cost 1.18x'), None),
+])
+async def test_run_local_active_verification_detects_consecutive_failures(tmp_path, failures, threshold):
+    tool_calls = tuple((ToolCallDelta(0, f'check-{index}', 'verify_workspace', '{}'),
+                        ResponseCompleted('tool_calls')) for index in range(len(failures)))
+    model = ScriptedModel((*tool_calls, (TextDelta('fixed'), ResponseCompleted('stop'))))
+    checks = iter((*failures, None))
 
     async def verify(path):
         assert path == tmp_path
@@ -249,10 +284,13 @@ async def test_run_local_active_verification_detects_identical_failure(tmp_path)
         'produce a plan', completion_check=verify, active_verification=True, pivot_on_stall=True,
     )
     assert result.status is RunStatus.COMPLETED
-    assert 'Choose a different approach' in result.messages[-2].content[0].output
+    tool_outputs = [message.content[0].output for message in result.messages if message.role == 'tool']
+    first_pivot = next((index for index, output in enumerate(tool_outputs, 1)
+                        if 'Choose a different approach' in output), None)
+    assert first_pivot == threshold
     assert not registry.specs()
     metrics = metrics_from_events(result.events)
-    assert (metrics.workspace_verifications, metrics.verification_stalls) == (2, 1)
+    assert (metrics.workspace_verifications, metrics.verification_stalls) == (len(failures), int(threshold is not None))
 
 
 @pytest.mark.parametrize("malformed", [
