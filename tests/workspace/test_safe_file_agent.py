@@ -1,3 +1,4 @@
+import contextlib
 import os
 import stat
 import sys
@@ -115,7 +116,7 @@ async def test_container_alias_only_resolves_paths_within_the_mounted_workspace(
     context = ToolContext("run", "session", workspace)
     inside = await executor.execute(ToolCall("read", "read_file", {"path": "/app/sample.txt"}), context)
     outside = await executor.execute(ToolCall("outside", "read_file", {"path": path}), context)
-    assert inside.output == "inside" and not inside.is_error
+    assert inside.output == "1: inside" and not inside.is_error
     assert outside.is_error and outside.output != "outside"
 
 
@@ -144,14 +145,16 @@ async def test_read_file_pages_long_utf8_files_without_splitting_a_line(tmp_path
 
     first = await executor.execute(ToolCall("first", "read_file", {"path": "large.txt"}), context)
     assert not first.is_error
-    assert first.output == "".join(lines[:26]) + "[Read lines 1-26 of 300.] Continue with start_line=27."
+    assert first.output == "".join(f"{i}: {line}" for i, line in enumerate(lines[:39], 1)) + (
+        "[Read lines 1-39 of 300.] Continue with start_line=40.")
 
     second = await executor.execute(
         ToolCall("second", "read_file", {"path": "large.txt", "start_line": 27, "max_lines": 2}),
         context,
     )
     assert not second.is_error
-    assert second.output == "".join(lines[26:28]) + "[Read lines 27-28 of 300.] Continue with start_line=29."
+    assert second.output == "".join(f"{i}: {line}" for i, line in enumerate(lines[26:28], 27)) + (
+        "[Read lines 27-28 of 300.] Continue with start_line=29.")
 
 
 async def test_read_file_preserves_small_results_and_rejects_invalid_ranges(tmp_path: Path) -> None:
@@ -165,8 +168,30 @@ async def test_read_file_preserves_small_results_and_rejects_invalid_ranges(tmp_
     invalid = await executor.execute(
         ToolCall("two", "read_file", {"path": "small.txt", "start_line": 0}), context,
     )
-    assert not small.is_error and small.output == "small"
+    assert not small.is_error and small.output == "1: small"
     assert invalid.is_error
+
+
+async def test_search_text_returns_literal_matches_and_stays_inside_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "main.py").write_text("other\na.b\naxb\na.b again\n")
+    (workspace / "binary.dat").write_bytes(b"\x00a.b")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("a.b outside")
+    with contextlib.suppress(OSError):
+        (workspace / "link.txt").symlink_to(outside)
+    registry = ToolRegistry()
+    for tool in make_file_tools(mounts=("/app",)):
+        registry.register(tool)
+    executor = ToolExecutor(registry)
+    context = ToolContext("run", "session", workspace)
+    result = await executor.execute(ToolCall("one", "search_text", {"pattern": "a.b", "path": "/app"}), context)
+    limited = await executor.execute(ToolCall("two", "search_text", {"pattern": "a.b", "max_results": 1}), context)
+    escaped = await executor.execute(ToolCall("three", "search_text", {"pattern": "a.b", "path": "../outside.txt"}), context)
+    assert not result.is_error and result.output == "main.py:2:a.b\nmain.py:4:a.b again"
+    assert limited.output.startswith("main.py:2:a.b\n[Results truncated")
+    assert escaped.is_error
 
 
 async def test_agent_changes_only_sandbox_workspace(

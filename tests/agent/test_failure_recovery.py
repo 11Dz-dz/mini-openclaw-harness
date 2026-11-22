@@ -54,7 +54,8 @@ async def test_output_truncation_discards_the_entire_batch_and_recovers(tmp_path
         assert not (workspace / 'unreviewed').exists()
         assert (workspace / 'earlier').read_text() == 'keep'
         assert (workspace / 'corrected').read_text() == 'yes'
-        assert any(event.payload == ContextInjected(('model:output-truncation',)) for event in result.events)
+        assert any(isinstance(event.payload, ContextInjected) and 'model:output-truncation' in event.payload.source_ids
+                   for event in result.events)
         assert [message.role for message in model.requests[2].messages] == ['user', 'assistant', 'tool', 'user']
         feedback = model.requests[2].messages[-1].content[0].text
         assert 'Interrupted tools: write_file' in feedback
@@ -96,11 +97,11 @@ async def test_reasoning_recovery_suspends_thinking_until_a_tool_succeeds(tmp_pa
     try:
         result = await app.run_prompt('produce result', required_artifacts=('result.txt',))
         assert result.status is RunStatus.COMPLETED
-        assert [request.enable_thinking for request in model.requests] == [None, None, False, False, False, None]
+        assert [request.enable_thinking for request in model.requests] == [None, None, False, False, False, False]
         assert [request.tool_choice for request in model.requests] == [None, None, 'required', 'required', 'required', None]
         forced = encode_request(model.requests[2], stream=True)
         assert forced['enable_thinking'] is False and forced['tool_choice'] == 'required'
-        assert 'enable_thinking' not in encode_request(model.requests[-1], stream=True)
+        assert encode_request(model.requests[-1], stream=True)['enable_thinking'] is False
         assert {spec['function']['name'] for spec in forced['tools']} <= {'write_file', 'run_command'}
         metrics = metrics_from_events(result.events)
         assert (metrics.reasoning_recovery_requests, metrics.reasoning_recoveries) == (3, 1)
@@ -128,11 +129,54 @@ async def test_reasoning_recovery_restores_tools_after_a_command_returns_test_fa
                              reasoning_circuit_breaker=True).run('run tests')
     assert result.status is RunStatus.COMPLETED
     assert model.requests[2].enable_thinking is False
-    assert model.requests[3].enable_thinking is None
+    assert model.requests[3].enable_thinking is False
     assert 'read_file' in {tool['function']['name'] for tool in model.requests[3].tools}
     tool_result = result.messages[2].content[0]
     assert not tool_result.is_error and json.loads(tool_result.output)['exit_code'] == 1
     assert metrics_from_events(result.events).reasoning_recoveries == 1
+
+
+async def test_reasoning_recovery_cools_down_then_latches_after_second_recovery(tmp_path):
+    registry = ToolRegistry()
+    for tool in make_file_tools():
+        registry.register(tool)
+    (tmp_path / 'source.txt').write_text('source')
+    spin = (ReasoningDelta('private reasoning'), ResponseCompleted('length'))
+
+    def call(index, tool, arguments):
+        return (ToolCallDelta(0, str(index), tool, arguments), ResponseCompleted('tool_calls'))
+
+    model = ScriptedModel((
+        spin, spin, call(3, 'write_file', '{"path":"draft.txt","content":"first"}'),
+        *(call(i, 'read_file', '{"path":"source.txt"}') for i in range(4, 8)),
+        spin, spin, call(10, 'write_file', '{"path":"draft.txt","content":"second"}'),
+        *(call(i, 'read_file', '{"path":"source.txt"}') for i in range(11, 16)),
+        (TextDelta('done'), ResponseCompleted('stop')),
+    ))
+    result = await AgentLoop(model, 'fake', tools=registry, workspace=tmp_path,
+                             reasoning_circuit_breaker=True).run('produce a draft')
+    assert result.status is RunStatus.COMPLETED
+    modes = [request.enable_thinking for request in model.requests]
+    assert modes == [None] * 2 + [False] * 5 + [None] * 2 + [False] * 7
+    assert all('read_file' in {spec['function']['name'] for spec in model.requests[i].tools} for i in (3, 10, 15))
+    assert metrics_from_events(result.events).reasoning_recoveries == 2
+
+
+async def test_budget_notice_appears_at_tail_on_the_final_four_turns(tmp_path):
+    registry = ToolRegistry()
+    registry.register(make_file_tools()[0])
+    (tmp_path / 'source.txt').write_text('source')
+    reads = [(ToolCallDelta(0, str(i), 'read_file', '{"path":"source.txt"}'),
+              ResponseCompleted('tool_calls')) for i in range(5)]
+    model = ScriptedModel((*reads, (ResponseCompleted('stop'),)))
+    result = await AgentLoop(model, 'fake', tools=registry, workspace=tmp_path,
+                             limits=RunLimits(max_turns=6)).run('inspect source')
+    assert result.status is RunStatus.COMPLETED
+    assert all('Budget notice' not in str(request.messages) for request in model.requests[:2])
+    for count, request in zip(range(4, 0, -1), model.requests[2:], strict=True):
+        assert request.messages[-1].role == 'user'
+        assert f'Budget notice: only {count} turn' in request.messages[-1].content[0].text
+    assert all('Budget notice' not in str(message) for message in result.messages)
 
 
 async def test_truncated_tool_fragments_break_the_reasoning_spin_streak(tmp_path):
@@ -203,8 +247,9 @@ async def test_cross_turn_reasoning_removal_keeps_current_tool_protocol(tmp_path
         (app.workspace_session.workspace / 'file').write_text('file contents')
         result = await app.agent.run('current question', history=history)
         assert result.status is RunStatus.COMPLETED
-        assert model.requests[0].messages[1].reasoning_content is None
-        assert model.requests[1].messages[3].reasoning_content == 'current reasoning'
+        assert model.requests[0].messages[2].reasoning_content is None
+        assert model.requests[1].messages[4].reasoning_content == 'current reasoning'
+        assert 'verify_workspace' in model.requests[0].messages[0].content[0].text
         assert result.messages[1].reasoning_content == 'prior reasoning'
         assert 'remember' not in {spec['function']['name'] for spec in model.requests[0].tools}
     finally:

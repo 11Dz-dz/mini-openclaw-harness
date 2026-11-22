@@ -80,7 +80,7 @@ async def test_deepseek_style_thinking_tool_loop_and_next_user_turn(tmp_path):
             assistants = [m for m in payload["messages"] if m["role"] == "assistant"]
             assert assistants[0]["reasoning_content"] == "first state"
             assert assistants[0]["content"] == "Checking the file."
-            assert any(m.get("content") == "fixture content" for m in payload["messages"] if m["role"] == "tool")
+            assert any(m.get("content") == "1: fixture content" for m in payload["messages"] if m["role"] == "tool")
             if len(requests) == 3:
                 assert assistants[1]["reasoning_content"] == "second state"
             deltas = [{"reasoning_content": "second state"}, {"content": "File read successfully."}]

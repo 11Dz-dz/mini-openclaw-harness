@@ -870,7 +870,7 @@ async def create_app(
         if coding_tools:
             for tool in tools.values():
                 if tool.spec.name not in {
-                    "read_file", "write_file", "replace_text", "run_command", "git_status", "git_diff", "git_log", "git_show",
+                    "read_file", "search_text", "write_file", "replace_text", "run_command", "git_status", "git_diff", "git_log", "git_show",
                 }:
                     tools.disable(tool.spec.name, "outside the coding tool profile")
             web_closeables, mcp_clients, mcp_status = (), (), ()
@@ -913,6 +913,7 @@ async def create_app(
             context_providers=context_providers,
             strip_previous_turn_reasoning=strip_previous_turn_reasoning,
             reasoning_circuit_breaker=reasoning_circuit_breaker,
+            coding_guidance=coding_tools,
         )
         # Scheduled work runs without a human, so it gets its own loop whose
         # approval provider denies anything the policy wants to ask about.
@@ -943,6 +944,7 @@ async def create_app(
             context_providers=context_providers,
             strip_previous_turn_reasoning=strip_previous_turn_reasoning,
             reasoning_circuit_breaker=reasoning_circuit_breaker,
+            coding_guidance=coding_tools,
         )
         scheduler_runtime = SchedulerRuntime(
             scheduler,

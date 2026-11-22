@@ -53,6 +53,9 @@ MAX_TOOL_CALL_CORRECTIONS = 2
 MAX_COMPLETION_CORRECTIONS = 2
 REASONING_SPIN_LIMIT = 2
 REASONING_RECOVERY_TOOLS = {"write_file", "run_command"}
+REASONING_COOLDOWN_TURNS = 4
+REASONING_LATCH_THRESHOLD = 2
+BUDGET_NOTICE_TURNS = 4
 type CompletionCheck = Callable[[Path], Awaitable[str | None]]
 OUTPUT_TRUNCATION_CORRECTION = ContextSource(
     "model:output-truncation",
@@ -75,6 +78,15 @@ REASONING_RECOVERY = ContextSource(
     "The output limit was reached repeatedly before a tool call could start. Thinking is temporarily disabled. "
     "Use one small workspace tool call now to write or run an initial step. Break the task into steps and use runtime "
     "feedback before attempting the full solution.",
+    priority=100,
+    required=True,
+)
+CODING_GUIDANCE = ContextSource(
+    "coding:guidance",
+    "Use search_text to locate the relevant code and stop broad exploration once you have a workable approach. "
+    "Write an initial patch or deliverable early. If verify_workspace is available, call it on the initial deliverable "
+    "to establish a baseline before writing another evaluation script. Prefer replace_text for small edits to existing "
+    "files, and run a focused test after each meaningful change.",
     priority=100,
     required=True,
 )
@@ -229,6 +241,7 @@ class AgentLoop:
         context_providers: tuple["ContextProvider", ...] = (),
         strip_previous_turn_reasoning: bool = False,
         reasoning_circuit_breaker: bool = False,
+        coding_guidance: bool = False,
     ) -> None:
         self.provider = provider
         self.model = model
@@ -254,6 +267,7 @@ class AgentLoop:
         self.context_providers = context_providers
         self.strip_previous_turn_reasoning = strip_previous_turn_reasoning
         self.reasoning_circuit_breaker = reasoning_circuit_breaker
+        self.coding_guidance = coding_guidance
 
     async def run(
         self,
@@ -395,12 +409,16 @@ class AgentLoop:
             extra_sources = tuple(
                 source for source in extra_sources if source.text.strip()
             )
+            if self.coding_guidance:
+                extra_sources = (CODING_GUIDANCE, *extra_sources)
 
             tool_calls_used = 0
             tool_call_corrections = 0
             completion_corrections = 0
             output_truncation_retries = 0
             reasoning_spin_streak = 0
+            reasoning_cooldown = 0
+            reasoning_recovery_count = 0
             next_feedback: ContextSource | None = None
             workspace = self.workspace or Path.cwd()
             artifacts_ready = not required_artifacts or not _missing_artifacts(workspace, required_artifacts)
@@ -433,7 +451,19 @@ class AgentLoop:
                     tool_choice = "required"
                     if not active_feedback or active_feedback[-1] != REASONING_RECOVERY:
                         active_feedback.append(REASONING_RECOVERY)
-                feedback_text = "\n".join(f"- {item.text}" for item in active_feedback[-2:])
+                thinking_disabled = bool(recovery_tools or reasoning_cooldown
+                                         or reasoning_recovery_count >= REASONING_LATCH_THRESHOLD)
+                reasoning_cooldown = max(0, reasoning_cooldown - 1)
+                feedback = active_feedback[-2:]
+                remaining_turns = self.limits.max_turns - turn + 1
+                if remaining_turns <= BUDGET_NOTICE_TURNS:
+                    count = "only 1 turn remains" if remaining_turns == 1 else f"only {remaining_turns} turns remain"
+                    feedback.append(ContextSource(
+                        "model:budget-notice", f"Budget notice: {count}, including this one. "
+                        "Stop broad exploration, write/update the required deliverable or patch immediately, "
+                        "and run a focused check.", priority=100, required=True,
+                    ))
+                feedback_text = "\n".join(f"- {item.text}" for item in feedback)
                 feedback_message = (Message("user", (TextContent(
                     "[Harness follow-up for the current task]\n" + feedback_text),)) if feedback_text else None)
                 # Budget the tail separately so the original task stays required.
@@ -446,7 +476,7 @@ class AgentLoop:
                     overhead = self.context_builder.estimator.estimate(json.dumps(
                         encode_request(ModelRequest(
                             self.model, (), tools, max_output_tokens=self.context_budget.reserve_output,
-                            tool_choice=tool_choice, enable_thinking=False if recovery_tools else None), stream=True),
+                            tool_choice=tool_choice, enable_thinking=False if thinking_disabled else None), stream=True),
                         ensure_ascii=False, separators=(",", ":")))
                     history = request_messages
                     budget_sources = tuple(replace(source, token_text=json.dumps(encode_message(
@@ -504,7 +534,7 @@ class AgentLoop:
                 if feedback_message is not None:
                     request_messages = (*request_messages, feedback_message)
                 injected = tuple(source.source_id for source in head_sources) + tuple(
-                    dict.fromkeys(source.source_id for source in active_feedback[-2:]))
+                    dict.fromkeys(source.source_id for source in feedback))
                 if injected:
                     await emit(ContextInjected(injected))
                 await emit(
@@ -544,7 +574,7 @@ class AgentLoop:
                         max_output_tokens=(self.context_budget.reserve_output
                                            if self.context_budget else None),
                         tool_choice=tool_choice,
-                        enable_thinking=False if recovery_tools else None,
+                        enable_thinking=False if thinking_disabled else None,
                     )
                 ):
                     if isinstance(event, TextDelta):
@@ -575,7 +605,7 @@ class AgentLoop:
                             sum(map(len, reasoning)), sum(map(len, answer)), tool_fragments,
                         ))
                         break
-                if self.reasoning_circuit_breaker and not recovery_tools:
+                if self.reasoning_circuit_breaker and not thinking_disabled:
                     if finish_reason == "length" and not tool_fragments and (reasoning or reasoning_tokens):
                         reasoning_spin_streak += 1
                     else:
@@ -774,6 +804,8 @@ class AgentLoop:
                         recovered = True
                 if recovered:
                     reasoning_spin_streak = 0
+                    reasoning_cooldown = REASONING_COOLDOWN_TURNS
+                    reasoning_recovery_count += 1
                     await emit(ReasoningRecovery(turn, recovered=True))
                 if status is RunStatus.EXECUTING_TOOLS:
                     status = transition(status, RunStatus.RECORDING_RESULTS)

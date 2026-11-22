@@ -1,3 +1,4 @@
+import asyncio
 import os
 import stat
 from functools import partial
@@ -13,8 +14,11 @@ from miniclaw.tools.types import (
 from miniclaw.workspace.paths import resolve_workspace_path
 
 MAX_FILE_READ_BYTES = 1024 * 1024
-MAX_FILE_PAGE_BYTES = 8 * 1024
-MAX_FILE_PAGE_LINES = 200
+MAX_FILE_PAGE_BYTES = 12 * 1024
+MAX_FILE_PAGE_LINES = 300
+MAX_SEARCH_BYTES = 32 * 1024 * 1024
+MAX_SEARCH_FILES = 5000
+SEARCH_EXCLUDED = {'.git', '.venv', '__pycache__', 'node_modules'}
 
 
 async def read_file(
@@ -36,17 +40,19 @@ async def read_file(
         if not lines and not requested_page:
             return ""
         return f"[No lines at or after line {start + 1}. File has {len(lines)} lines.]"
-    end = start
+    page = []
     length = 0
-    for line in lines[start:start + limit]:
-        if length + len(line) > MAX_FILE_PAGE_BYTES:
+    for lineno, line in enumerate(lines[start:start + limit], start + 1):
+        numbered = f"{lineno}: ".encode() + line
+        if length + len(numbered) > MAX_FILE_PAGE_BYTES:
             break
-        length += len(line)
-        end += 1
-    if end == start:
-        raise ValueError(f"line {start + 1} exceeds the 8 KiB page limit; use a bounded command to inspect part of that line")
+        length += len(numbered)
+        page.append(numbered)
+    if not page:
+        raise ValueError(f"line {start + 1} exceeds the 12 KiB page limit; use a bounded command to inspect part of that line")
 
-    content = b"".join(lines[start:end]).decode("utf-8")
+    end = start + len(page)
+    content = b"".join(page).decode("utf-8")
     if end == len(lines) and not requested_page:
         return content
     footer = f"[Read lines {start + 1}-{end} of {len(lines)}.]"
@@ -54,6 +60,67 @@ async def read_file(
         footer += f" Continue with start_line={end + 1}."
     separator = "" if content.endswith("\n") else "\n"
     return f"{content}{separator}{footer}"
+
+
+def _search_files(path: Path):
+    if path.is_file():
+        yield path
+        return
+    if not path.is_dir():
+        raise ValueError('search path must be an existing file or directory')
+    for directory, subdirs, files in os.walk(path, followlinks=False):
+        subdirs[:] = sorted(name for name in subdirs if name not in SEARCH_EXCLUDED)
+        for name in sorted(files):
+            yield Path(directory) / name
+
+
+def _find_text(workspace: Path, path: Path, pattern: str, max_results: int) -> str:
+    matches = []
+    scanned = 0
+    output_bytes = 0
+    for index, candidate in enumerate(_search_files(path), 1):
+        if index > MAX_SEARCH_FILES or scanned >= MAX_SEARCH_BYTES:
+            return '\n'.join([*matches, '[Search limit reached. Narrow the path to continue.]'])
+        try:
+            details = candidate.lstat()
+            if not stat.S_ISREG(details.st_mode) or details.st_size > MAX_FILE_READ_BYTES:
+                continue
+            if not candidate.resolve().is_relative_to(workspace):
+                continue
+            with candidate.open('rb') as stream:
+                data = stream.read(min(MAX_FILE_READ_BYTES, MAX_SEARCH_BYTES - scanned) + 1)
+            scanned += len(data)
+            if scanned > MAX_SEARCH_BYTES:
+                return '\n'.join([*matches, '[Search limit reached. Narrow the path to continue.]'])
+            if len(data) > MAX_FILE_READ_BYTES or b'\0' in data:
+                continue
+            lines = data.decode('utf-8').splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        relative = candidate.relative_to(workspace).as_posix()
+        for lineno, line in enumerate(lines, 1):
+            offset = line.find(pattern)
+            if offset < 0:
+                continue
+            start = max(0, offset - 100)
+            excerpt = ('…' if start else '') + line[start:start + 400]
+            if start + 400 < len(line):
+                excerpt += '…'
+            result = f'{relative}:{lineno}:{excerpt}'
+            output_bytes += len(result.encode('utf-8')) + 1
+            if len(matches) >= max_results or output_bytes > MAX_FILE_PAGE_BYTES:
+                return '\n'.join([*matches, '[Results truncated. Narrow the path or search text.]'])
+            matches.append(result)
+    return '\n'.join(matches) if matches else 'No matches found.'
+
+
+async def search_text(
+    arguments: dict[str, object], context: ToolContext, *, mounts: tuple[str, ...] = (),
+) -> str:
+    workspace = context.workspace.resolve()
+    path = resolve_workspace_path(workspace, str(arguments.get('path', '.')), mounts=mounts)
+    return await asyncio.to_thread(_find_text, workspace, path, str(arguments['pattern']),
+                                   int(arguments.get('max_results', 40)))
 
 
 async def write_file(
@@ -158,7 +225,7 @@ def make_file_tools(
             ToolSpec(
                 "read_file",
                 "Read a UTF-8 text file inside the workspace. "
-                "Returns at most 200 lines or 8 KiB of file content per call. "
+                "Returns at most 300 lines or 12 KiB of numbered file content per call. "
                 "Use start_line and max_lines to inspect the relevant code after searching.",
                 {
                     "type": "object",
@@ -197,9 +264,29 @@ def make_file_tools(
         ),
         RegisteredTool(
             ToolSpec(
+                "search_text",
+                "Search UTF-8 workspace files for literal case-sensitive text. "
+                "Return file:line:match and use read_file on the relevant lines. "
+                "Search a directory recursively or one file, skipping binary files and common dependency caches.",
+                {
+                    "type": "object",
+                    "properties": {
+                        "pattern": {"type": "string", "minLength": 1, "maxLength": 256},
+                        "path": path_schema,
+                        "max_results": {"type": "integer", "minimum": 1, "maximum": 100},
+                    },
+                    "required": ["pattern"],
+                    **closed_object,
+                },
+                ToolCapabilities(filesystem="read"),
+            ),
+            partial(search_text, mounts=mounts),
+        ),
+        RegisteredTool(
+            ToolSpec(
                 "replace_text",
                 "Edit an existing UTF-8 file without sending the entire file. "
-                "Read the target region first and provide text that occurs exactly once. "
+                "Read the target region first and provide text that occurs exactly once, without display line numbers. "
                 "Use read_file to inspect the surrounding lines if the edit fails.",
                 {
                     "type": "object",

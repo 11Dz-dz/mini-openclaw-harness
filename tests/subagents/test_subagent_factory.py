@@ -51,7 +51,7 @@ async def test_child_runs_a_real_loop_and_reports_tool_evidence(
 
     assert result.status == "completed"
     assert result.summary == "inspected the readme"
-    assert result.evidence == ("child readable content",)
+    assert result.evidence == ("1: child readable content",)
     # A real child run, not a synthetic identifier.
     assert result.child_run_id and not result.child_run_id.startswith("child-")
 
