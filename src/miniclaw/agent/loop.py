@@ -90,6 +90,13 @@ CODING_GUIDANCE = ContextSource(
     priority=100,
     required=True,
 )
+ARTIFACTS_READY_FEEDBACK = ContextSource(
+    "workspace:artifacts-ready",
+    "The required deliverables now exist. Call verify_workspace next to run the configured checks, "
+    "then use the results to decide what to improve.",
+    priority=100,
+    required=True,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,6 +341,8 @@ class AgentLoop:
         same_failed_checks = 0
         consecutive_failed_checks = 0
         completion_feedback: list[ContextSource] = []
+        verification_registered = active_verification and completion_check is not None
+        ready_artifacts_checked = False
 
         async def check_workspace(workspace: Path, *, on_demand: bool) -> str | None:
             nonlocal last_check_error, same_failed_checks, consecutive_failed_checks
@@ -357,8 +366,11 @@ class AgentLoop:
             return error
 
         registry, executor = self.tools, self.tool_executor
-        if active_verification and completion_check is not None:
+        if verification_registered:
             async def verify_tool(_arguments, context):
+                nonlocal ready_artifacts_checked
+                if required_artifacts and not _missing_artifacts(context.workspace, required_artifacts):
+                    ready_artifacts_checked = True
                 error = await check_workspace(context.workspace, on_demand=True)
                 return error if error is not None else "The configured workspace check passed."
 
@@ -422,6 +434,7 @@ class AgentLoop:
             next_feedback: ContextSource | None = None
             workspace = self.workspace or Path.cwd()
             artifacts_ready = not required_artifacts or not _missing_artifacts(workspace, required_artifacts)
+            remind_artifacts_ready = artifacts_ready and bool(required_artifacts) and verification_registered
             if artifacts_ready and required_artifacts:
                 await emit(ArtifactsReady(0))
             for turn in range(1, self.limits.max_turns + 1):
@@ -455,6 +468,9 @@ class AgentLoop:
                                          or reasoning_recovery_count >= REASONING_LATCH_THRESHOLD)
                 reasoning_cooldown = max(0, reasoning_cooldown - 1)
                 feedback = active_feedback[-2:]
+                if remind_artifacts_ready and not recovery_tools:
+                    feedback.append(ARTIFACTS_READY_FEEDBACK)
+                    remind_artifacts_ready = False
                 remaining_turns = self.limits.max_turns - turn + 1
                 if remaining_turns <= BUDGET_NOTICE_TURNS:
                     count = "only 1 turn remains" if remaining_turns == 1 else f"only {remaining_turns} turns remain"
@@ -812,6 +828,7 @@ class AgentLoop:
                 if not artifacts_ready and not _missing_artifacts(workspace, required_artifacts):
                     artifacts_ready = True
                     await emit(ArtifactsReady(turn))
+                    remind_artifacts_ready = verification_registered and not ready_artifacts_checked
             status = transition(status, RunStatus.EXHAUSTED)
             await checkpoint()
             return RunResult(

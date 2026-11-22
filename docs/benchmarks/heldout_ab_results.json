@@ -1,0 +1,1509 @@
+{
+  "schema_version": 1,
+  "snapshot_time": "2026-11-22T20:02:17+08:00",
+  "design_manifest": "eval_manifest.json",
+  "aggregate": {
+    "all": {
+      "planned": 36,
+      "paired_graded": 33,
+      "both_pass": 12,
+      "both_fail": 13,
+      "historical_only": 1,
+      "current_only": 7,
+      "versions": {
+        "historical": {
+          "passed": 13,
+          "history_compaction_rounds": 120,
+          "tool_errors": 41,
+          "model_rounds": 673,
+          "input_tokens": 8812923,
+          "output_tokens": 429588,
+          "pass_rate_pct": 39.39
+        },
+        "budget-verification": {
+          "passed": 19,
+          "history_compaction_rounds": 20,
+          "tool_errors": 39,
+          "model_rounds": 864,
+          "input_tokens": 15994177,
+          "output_tokens": 555035,
+          "pass_rate_pct": 57.58
+        }
+      },
+      "delta_pp": 18.18,
+      "mcnemar_exact_p": 0.0703125
+    },
+    "swe": {
+      "planned": 21,
+      "paired_graded": 18,
+      "both_pass": 7,
+      "both_fail": 5,
+      "historical_only": 0,
+      "current_only": 6,
+      "versions": {
+        "historical": {
+          "passed": 7,
+          "history_compaction_rounds": 75,
+          "tool_errors": 18,
+          "model_rounds": 395,
+          "input_tokens": 5390142,
+          "output_tokens": 222162,
+          "pass_rate_pct": 38.89
+        },
+        "budget-verification": {
+          "passed": 13,
+          "history_compaction_rounds": 10,
+          "tool_errors": 16,
+          "model_rounds": 499,
+          "input_tokens": 9705439,
+          "output_tokens": 228511,
+          "pass_rate_pct": 72.22
+        }
+      },
+      "delta_pp": 33.33,
+      "mcnemar_exact_p": 0.03125
+    },
+    "terminal": {
+      "planned": 15,
+      "paired_graded": 15,
+      "both_pass": 5,
+      "both_fail": 8,
+      "historical_only": 1,
+      "current_only": 1,
+      "versions": {
+        "historical": {
+          "passed": 6,
+          "history_compaction_rounds": 45,
+          "tool_errors": 23,
+          "model_rounds": 278,
+          "input_tokens": 3422781,
+          "output_tokens": 207426,
+          "pass_rate_pct": 40.0
+        },
+        "budget-verification": {
+          "passed": 6,
+          "history_compaction_rounds": 10,
+          "tool_errors": 23,
+          "model_rounds": 365,
+          "input_tokens": 6288738,
+          "output_tokens": 326524,
+          "pass_rate_pct": 40.0
+        }
+      },
+      "delta_pp": 0.0,
+      "mcnemar_exact_p": 1.0
+    }
+  },
+  "by_repository": {
+    "django/django": {
+      "historical": 2,
+      "budget-verification": 5,
+      "paired_graded": 7,
+      "planned": 7
+    },
+    "harbor-framework/terminal-bench-2-1": {
+      "historical": 6,
+      "budget-verification": 6,
+      "paired_graded": 15,
+      "planned": 15
+    },
+    "psf/requests": {
+      "historical": 0,
+      "budget-verification": 0,
+      "paired_graded": 1,
+      "planned": 4
+    },
+    "pytest-dev/pytest": {
+      "historical": 2,
+      "budget-verification": 3,
+      "paired_graded": 5,
+      "planned": 5
+    },
+    "scikit-learn/scikit-learn": {
+      "historical": 3,
+      "budget-verification": 5,
+      "paired_graded": 5,
+      "planned": 5
+    }
+  },
+  "paired_outcome_flips": {
+    "budget-verification": [
+      "django__django-15400",
+      "django__django-12856",
+      "django__django-13401",
+      "scikit-learn__scikit-learn-11040",
+      "scikit-learn__scikit-learn-14894",
+      "pytest-dev__pytest-5495",
+      "sqlite-db-truncate"
+    ],
+    "historical": [
+      "sqlite-with-gcov"
+    ]
+  },
+  "ungraded_cases": [
+    {
+      "id": "psf__requests-2674",
+      "benchmark": "swe",
+      "reason": "fixture_unvalidated"
+    },
+    {
+      "id": "psf__requests-2148",
+      "benchmark": "swe",
+      "reason": "fixture_unvalidated"
+    },
+    {
+      "id": "psf__requests-863",
+      "benchmark": "swe",
+      "reason": "fixture_unvalidated"
+    }
+  ],
+  "grading_notes": {
+    "swe_environment": "Official cached and source-pinned reconstructed containers were accepted only if the reference patch passed and the unchanged base did not. Same grader per A/B pair.",
+    "requests_3362": "An internal Docker network with a reserved unreachable address reproduced the original connection timeout, with no external connection.",
+    "pytest_8365": "Both existing runs were exported and scored after omitting only the untracked test temporary directory from the export copy.",
+    "unvalidated_requests": "A subset of old Requests assertions depends on external HTTP/DNS behavior. The reference patch did not pass in the constrained offline grader."
+  },
+  "cases": [
+    {
+      "id": "django__django-14017",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "exhausted",
+        "seconds": 271.7,
+        "telemetry": {
+          "history_compaction_rounds": 10,
+          "tool_errors": 2,
+          "model_rounds": 24,
+          "input_tokens": 436130,
+          "output_tokens": 15356
+        },
+        "grader_image_id": "sha256:0ad260c03d1ad0d9bcf162688be11c751faab054c2f57f0cb0b643c79a8c9164",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-14017",
+          "python": "3.9",
+          "source_commit": "466920f6d726eee90d5566e0a9948e92b33a122e",
+          "image_id": "sha256:0ad260c03d1ad0d9bcf162688be11c751faab054c2f57f0cb0b643c79a8c9164",
+          "source_tarball_sha256": "b28c3d299c2ed92bf2c7f03b974fc546f716ce4176b9cf008ad414557e298f3d",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "exhausted",
+        "seconds": 297.1,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 32,
+          "input_tokens": 793146,
+          "output_tokens": 19747
+        },
+        "grader_image_id": "sha256:0ad260c03d1ad0d9bcf162688be11c751faab054c2f57f0cb0b643c79a8c9164",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-14017",
+          "python": "3.9",
+          "source_commit": "466920f6d726eee90d5566e0a9948e92b33a122e",
+          "image_id": "sha256:0ad260c03d1ad0d9bcf162688be11c751faab054c2f57f0cb0b643c79a8c9164",
+          "source_tarball_sha256": "b28c3d299c2ed92bf2c7f03b974fc546f716ce4176b9cf008ad414557e298f3d",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      }
+    },
+    {
+      "id": "django__django-15851",
+      "benchmark": "swe",
+      "historical": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 272.6,
+        "telemetry": {
+          "history_compaction_rounds": 1,
+          "tool_errors": 0,
+          "model_rounds": 20,
+          "input_tokens": 202741,
+          "output_tokens": 4487
+        },
+        "grader_image_id": "sha256:3af0cda8113edecd521efbd10b9873f93abce759b7afebdcbdc65222161491c2",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-15851",
+          "python": "3.9",
+          "source_commit": "b4817d20b9e55df30be0b1b2ca8c8bb6d61aab07",
+          "image_id": "sha256:3af0cda8113edecd521efbd10b9873f93abce759b7afebdcbdc65222161491c2",
+          "source_tarball_sha256": "a47e651196a0158e24d28cc458f2f206d6be3a54a66b79bbb5546270895f4f02",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 109.1,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 12,
+          "input_tokens": 119908,
+          "output_tokens": 2575
+        },
+        "grader_image_id": "sha256:3af0cda8113edecd521efbd10b9873f93abce759b7afebdcbdc65222161491c2",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-15851",
+          "python": "3.9",
+          "source_commit": "b4817d20b9e55df30be0b1b2ca8c8bb6d61aab07",
+          "image_id": "sha256:3af0cda8113edecd521efbd10b9873f93abce759b7afebdcbdc65222161491c2",
+          "source_tarball_sha256": "a47e651196a0158e24d28cc458f2f206d6be3a54a66b79bbb5546270895f4f02",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      }
+    },
+    {
+      "id": "django__django-15400",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "completed",
+        "seconds": 283.8,
+        "telemetry": {
+          "history_compaction_rounds": 4,
+          "tool_errors": 0,
+          "model_rounds": 23,
+          "input_tokens": 342171,
+          "output_tokens": 8341
+        },
+        "grader_image_id": "sha256:a17f8e7f5fa252e2c8327be7afbcfeaf8940d6291d81084ae44751fd7ad21368",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-15400",
+          "python": "3.9",
+          "source_commit": "4c76ffc2d6c77c850b4bef8d9acc197d11c47937",
+          "image_id": "sha256:a17f8e7f5fa252e2c8327be7afbcfeaf8940d6291d81084ae44751fd7ad21368",
+          "source_tarball_sha256": "198356a2be5fb5b7d33fe4b843c4a888182094dd8066606d776f6668b5f4ac4c",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "timeout",
+        "seconds": 383.9,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 30,
+          "input_tokens": 592961,
+          "output_tokens": 14437
+        },
+        "grader_image_id": "sha256:a17f8e7f5fa252e2c8327be7afbcfeaf8940d6291d81084ae44751fd7ad21368",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-15400",
+          "python": "3.9",
+          "source_commit": "4c76ffc2d6c77c850b4bef8d9acc197d11c47937",
+          "image_id": "sha256:a17f8e7f5fa252e2c8327be7afbcfeaf8940d6291d81084ae44751fd7ad21368",
+          "source_tarball_sha256": "198356a2be5fb5b7d33fe4b843c4a888182094dd8066606d776f6668b5f4ac4c",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      }
+    },
+    {
+      "id": "django__django-12856",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 386.5,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 16,
+          "input_tokens": 131906,
+          "output_tokens": 7812
+        },
+        "grader_image_id": "sha256:754b26ee6aad45e76931d01011ef733c4da8f329169923392d5a1f375bc431dc",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-12856",
+          "python": "3.9",
+          "source_commit": "8328811f048fed0dd22573224def8c65410c9f2e",
+          "image_id": "sha256:754b26ee6aad45e76931d01011ef733c4da8f329169923392d5a1f375bc431dc",
+          "source_tarball_sha256": "625738d7bc0c80707134fb915c6316da000a6aa4a9dba4c2ee6b78f4e0fb37ab",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "timeout",
+        "seconds": 386.2,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 28,
+          "input_tokens": 547684,
+          "output_tokens": 7718
+        },
+        "grader_image_id": "sha256:754b26ee6aad45e76931d01011ef733c4da8f329169923392d5a1f375bc431dc",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-12856",
+          "python": "3.9",
+          "source_commit": "8328811f048fed0dd22573224def8c65410c9f2e",
+          "image_id": "sha256:754b26ee6aad45e76931d01011ef733c4da8f329169923392d5a1f375bc431dc",
+          "source_tarball_sha256": "625738d7bc0c80707134fb915c6316da000a6aa4a9dba4c2ee6b78f4e0fb37ab",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      }
+    },
+    {
+      "id": "django__django-14155",
+      "benchmark": "swe",
+      "historical": {
+        "passed": true,
+        "agent_status": "exhausted",
+        "seconds": 361.2,
+        "telemetry": {
+          "history_compaction_rounds": 8,
+          "tool_errors": 1,
+          "model_rounds": 24,
+          "input_tokens": 392017,
+          "output_tokens": 16293
+        },
+        "grader_image_id": "sha256:095df548acccb0c097deb9113d9a03d7daeb2071312214e2797f110e754dddc4",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-14155",
+          "python": "3.9",
+          "source_commit": "2f13c476abe4ba787b6cb71131818341911f43cc",
+          "image_id": "sha256:095df548acccb0c097deb9113d9a03d7daeb2071312214e2797f110e754dddc4",
+          "source_tarball_sha256": "399c3ea13d9ebc11cdba8a11bcac8141792dead4ad499cbcad146d28172ba10b",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 356.4,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 32,
+          "input_tokens": 655250,
+          "output_tokens": 17368
+        },
+        "grader_image_id": "sha256:095df548acccb0c097deb9113d9a03d7daeb2071312214e2797f110e754dddc4",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-14155",
+          "python": "3.9",
+          "source_commit": "2f13c476abe4ba787b6cb71131818341911f43cc",
+          "image_id": "sha256:095df548acccb0c097deb9113d9a03d7daeb2071312214e2797f110e754dddc4",
+          "source_tarball_sha256": "399c3ea13d9ebc11cdba8a11bcac8141792dead4ad499cbcad146d28172ba10b",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      }
+    },
+    {
+      "id": "django__django-13401",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 375.9,
+        "telemetry": {
+          "history_compaction_rounds": 9,
+          "tool_errors": 1,
+          "model_rounds": 21,
+          "input_tokens": 302301,
+          "output_tokens": 20094
+        },
+        "grader_image_id": "sha256:fdb71d2aaa8760753c4f4516589b408f1246aaf43afa5ee73e0f77e34281fb53",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-13401",
+          "python": "3.9",
+          "source_commit": "453967477e3ddae704cd739eac2449c0e13d464c",
+          "image_id": "sha256:fdb71d2aaa8760753c4f4516589b408f1246aaf43afa5ee73e0f77e34281fb53",
+          "source_tarball_sha256": "e429a7e5e6807ffe85d69a5c0f8cc1ab3cd259f066d0e1f22227f7ece656abd4",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 308.8,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 31,
+          "input_tokens": 527084,
+          "output_tokens": 10566
+        },
+        "grader_image_id": "sha256:fdb71d2aaa8760753c4f4516589b408f1246aaf43afa5ee73e0f77e34281fb53",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-13401",
+          "python": "3.9",
+          "source_commit": "453967477e3ddae704cd739eac2449c0e13d464c",
+          "image_id": "sha256:fdb71d2aaa8760753c4f4516589b408f1246aaf43afa5ee73e0f77e34281fb53",
+          "source_tarball_sha256": "e429a7e5e6807ffe85d69a5c0f8cc1ab3cd259f066d0e1f22227f7ece656abd4",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling"
+        }
+      }
+    },
+    {
+      "id": "django__django-13321",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "completed",
+        "seconds": 284.0,
+        "telemetry": {
+          "history_compaction_rounds": 4,
+          "tool_errors": 0,
+          "model_rounds": 23,
+          "input_tokens": 363730,
+          "output_tokens": 6038
+        },
+        "grader_image_id": "sha256:edeca2fa94e13d7eb085bdb949e513c66bbe15b32192e04c747e787d3e12a6be",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-13321",
+          "image_id": "sha256:edeca2fa94e13d7eb085bdb949e513c66bbe15b32192e04c747e787d3e12a6be",
+          "python": "3.9",
+          "source_tarball_sha256": "c01afc539f5a0fe102380334f929b7f20a2a2d72bd3a038c46be7421c1062f99",
+          "upstream_python": "3.6",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "35b03788b0607c1f8d2b64e4fa9e1669b0907ea4"
+        }
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "completed",
+        "seconds": 341.4,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 31,
+          "input_tokens": 856982,
+          "output_tokens": 13162
+        },
+        "grader_image_id": "sha256:edeca2fa94e13d7eb085bdb949e513c66bbe15b32192e04c747e787d3e12a6be",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-django-django-13321",
+          "image_id": "sha256:edeca2fa94e13d7eb085bdb949e513c66bbe15b32192e04c747e787d3e12a6be",
+          "python": "3.9",
+          "source_tarball_sha256": "c01afc539f5a0fe102380334f929b7f20a2a2d72bd3a038c46be7421c1062f99",
+          "upstream_python": "3.6",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "35b03788b0607c1f8d2b64e4fa9e1669b0907ea4"
+        }
+      }
+    },
+    {
+      "id": "scikit-learn__scikit-learn-15535",
+      "benchmark": "swe",
+      "historical": {
+        "passed": true,
+        "agent_status": "exhausted",
+        "seconds": 367.1,
+        "telemetry": {
+          "history_compaction_rounds": 8,
+          "tool_errors": 0,
+          "model_rounds": 24,
+          "input_tokens": 390500,
+          "output_tokens": 26932
+        },
+        "grader_image_id": "sha256:82656980700c2986c1f5ffe162b84e8e1bbd60737ed1fd4732f5c704893670ae",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-scikit-learn-scikit-learn-15535",
+          "python": "3.9",
+          "upstream_python": "3.6",
+          "source_commit": "70b0ddea992c01df1a41588fa9e2d130fb6b13f8",
+          "image_id": "sha256:82656980700c2986c1f5ffe162b84e8e1bbd60737ed1fd4732f5c704893670ae",
+          "source_tarball_sha256": "5ee69c5cd9e343e15a5f636f771117736cf75cb27cbfb2fed026d275b1c9ad06",
+          "dependency_source": "source-pinned SWE-bench tests with substitute Python and source build"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "exhausted",
+        "seconds": 257.7,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 32,
+          "input_tokens": 713885,
+          "output_tokens": 12232
+        },
+        "grader_image_id": "sha256:82656980700c2986c1f5ffe162b84e8e1bbd60737ed1fd4732f5c704893670ae",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-scikit-learn-scikit-learn-15535",
+          "python": "3.9",
+          "upstream_python": "3.6",
+          "source_commit": "70b0ddea992c01df1a41588fa9e2d130fb6b13f8",
+          "image_id": "sha256:82656980700c2986c1f5ffe162b84e8e1bbd60737ed1fd4732f5c704893670ae",
+          "source_tarball_sha256": "5ee69c5cd9e343e15a5f636f771117736cf75cb27cbfb2fed026d275b1c9ad06",
+          "dependency_source": "source-pinned SWE-bench tests with substitute Python and source build"
+        }
+      }
+    },
+    {
+      "id": "scikit-learn__scikit-learn-13439",
+      "benchmark": "swe",
+      "historical": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 130.0,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 2,
+          "model_rounds": 23,
+          "input_tokens": 176159,
+          "output_tokens": 6674
+        },
+        "grader_image_id": "sha256:310d6351ebb154cb8e3e8bbd7839e832b4aeaa7a95af595fe86a2cb5c1ebf10b",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-sklearn13439-py36",
+          "python": "3.6.13",
+          "upstream_python": "3.6",
+          "source_commit": "a62775e99f2a5ea3d51db7160fad783f6cd8a4c5",
+          "image_id": "sha256:310d6351ebb154cb8e3e8bbd7839e832b4aeaa7a95af595fe86a2cb5c1ebf10b",
+          "source_tarball_sha256": "da354d258d71259d23dccf98ef2048e64c68531d6aea558b484e6a6e33b1685f",
+          "dependency_source": "pinned source with legacy Conda Python 3.6 and offline SWE-bench tests"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 133.6,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 27,
+          "input_tokens": 251676,
+          "output_tokens": 5319
+        },
+        "grader_image_id": "sha256:310d6351ebb154cb8e3e8bbd7839e832b4aeaa7a95af595fe86a2cb5c1ebf10b",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-sklearn13439-py36",
+          "python": "3.6.13",
+          "upstream_python": "3.6",
+          "source_commit": "a62775e99f2a5ea3d51db7160fad783f6cd8a4c5",
+          "image_id": "sha256:310d6351ebb154cb8e3e8bbd7839e832b4aeaa7a95af595fe86a2cb5c1ebf10b",
+          "source_tarball_sha256": "da354d258d71259d23dccf98ef2048e64c68531d6aea558b484e6a6e33b1685f",
+          "dependency_source": "pinned source with legacy Conda Python 3.6 and offline SWE-bench tests"
+        }
+      }
+    },
+    {
+      "id": "scikit-learn__scikit-learn-15512",
+      "benchmark": "swe",
+      "historical": {
+        "passed": true,
+        "agent_status": "exhausted",
+        "seconds": 223.6,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 24,
+          "input_tokens": 321505,
+          "output_tokens": 9053
+        },
+        "grader_image_id": "sha256:7f98957be46707f9b69ac544eca581ce527329c0d4a56973dc715b6682609f22",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-scikit-learn-scikit-learn-15512",
+          "python": "3.9",
+          "upstream_python": "3.6",
+          "source_commit": "b8a4da8baa1137f173e7035f104067c7d2ffde22",
+          "image_id": "sha256:7f98957be46707f9b69ac544eca581ce527329c0d4a56973dc715b6682609f22",
+          "source_tarball_sha256": "fdc9af396872b2bf508c68184792fcb0a46107e718595438d7e02dc646d18d1f",
+          "dependency_source": "source-pinned SWE-bench tests with substitute Python and source build"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 88.6,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 11,
+          "input_tokens": 121276,
+          "output_tokens": 3946
+        },
+        "grader_image_id": "sha256:7f98957be46707f9b69ac544eca581ce527329c0d4a56973dc715b6682609f22",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-scikit-learn-scikit-learn-15512",
+          "python": "3.9",
+          "upstream_python": "3.6",
+          "source_commit": "b8a4da8baa1137f173e7035f104067c7d2ffde22",
+          "image_id": "sha256:7f98957be46707f9b69ac544eca581ce527329c0d4a56973dc715b6682609f22",
+          "source_tarball_sha256": "fdc9af396872b2bf508c68184792fcb0a46107e718595438d7e02dc646d18d1f",
+          "dependency_source": "source-pinned SWE-bench tests with substitute Python and source build"
+        }
+      }
+    },
+    {
+      "id": "scikit-learn__scikit-learn-11040",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "exhausted",
+        "seconds": 241.0,
+        "telemetry": {
+          "history_compaction_rounds": 9,
+          "tool_errors": 0,
+          "model_rounds": 24,
+          "input_tokens": 402599,
+          "output_tokens": 10957
+        },
+        "grader_image_id": "sha256:c0b6f900d2812f37343e3dfe2832745ee2a70dd928b6f45cdeeb0075bea05c12",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-scikit-learn-scikit-learn-11040",
+          "python": "3.9",
+          "upstream_python": "3.6",
+          "source_commit": "96a02f3934952d486589dddd3f00b40d5a5ab5f2",
+          "image_id": "sha256:c0b6f900d2812f37343e3dfe2832745ee2a70dd928b6f45cdeeb0075bea05c12",
+          "source_tarball_sha256": "0cb180d81e2ad6b66dcea537f4fef2789697d684161b946b094690a73c7f3573",
+          "dependency_source": "source-pinned SWE-bench tests with substitute Python and source build"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 235.7,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 32,
+          "input_tokens": 595909,
+          "output_tokens": 13151
+        },
+        "grader_image_id": "sha256:c0b6f900d2812f37343e3dfe2832745ee2a70dd928b6f45cdeeb0075bea05c12",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-scikit-learn-scikit-learn-11040",
+          "python": "3.9",
+          "upstream_python": "3.6",
+          "source_commit": "96a02f3934952d486589dddd3f00b40d5a5ab5f2",
+          "image_id": "sha256:c0b6f900d2812f37343e3dfe2832745ee2a70dd928b6f45cdeeb0075bea05c12",
+          "source_tarball_sha256": "0cb180d81e2ad6b66dcea537f4fef2789697d684161b946b094690a73c7f3573",
+          "dependency_source": "source-pinned SWE-bench tests with substitute Python and source build"
+        }
+      }
+    },
+    {
+      "id": "scikit-learn__scikit-learn-14894",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "exhausted",
+        "seconds": 243.2,
+        "telemetry": {
+          "history_compaction_rounds": 1,
+          "tool_errors": 1,
+          "model_rounds": 24,
+          "input_tokens": 283302,
+          "output_tokens": 13562
+        },
+        "grader_image_id": "sha256:5beaf3463fce8c5ee28ba9a2c0da451279aca94940ad60aed86b610913574fa0",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-scikit-learn-scikit-learn-14894",
+          "python": "3.9",
+          "upstream_python": "3.6",
+          "source_commit": "fdbaa58acbead5a254f2e6d597dc1ab3b947f4c6",
+          "image_id": "sha256:5beaf3463fce8c5ee28ba9a2c0da451279aca94940ad60aed86b610913574fa0",
+          "source_tarball_sha256": "33e3e3a5e603de71004ecb46494a8df91c4b8f218732ab1274599a99e60eb90a",
+          "dependency_source": "source-pinned SWE-bench tests with substitute Python and source build"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 195.8,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 22,
+          "input_tokens": 290607,
+          "output_tokens": 6854
+        },
+        "grader_image_id": "sha256:5beaf3463fce8c5ee28ba9a2c0da451279aca94940ad60aed86b610913574fa0",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-scikit-learn-scikit-learn-14894",
+          "python": "3.9",
+          "upstream_python": "3.6",
+          "source_commit": "fdbaa58acbead5a254f2e6d597dc1ab3b947f4c6",
+          "image_id": "sha256:5beaf3463fce8c5ee28ba9a2c0da451279aca94940ad60aed86b610913574fa0",
+          "source_tarball_sha256": "33e3e3a5e603de71004ecb46494a8df91c4b8f218732ab1274599a99e60eb90a",
+          "dependency_source": "source-pinned SWE-bench tests with substitute Python and source build"
+        }
+      }
+    },
+    {
+      "id": "pytest-dev__pytest-11148",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "exhausted",
+        "seconds": 270.6,
+        "telemetry": {
+          "history_compaction_rounds": 14,
+          "tool_errors": 2,
+          "model_rounds": 24,
+          "input_tokens": 456661,
+          "output_tokens": 23968
+        },
+        "grader_image_id": "sha256:e9f7172f899565294f30adf18d90edc24ce370c805ecd12d2df2fe6d15ebdd59",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-pytest-dev-pytest-11148",
+          "image_id": "sha256:e9f7172f899565294f30adf18d90edc24ce370c805ecd12d2df2fe6d15ebdd59",
+          "python": "3.9",
+          "source_tarball_sha256": "2d330522612e789b64668c6a8d20f9925e95aca7d12cdd70ec7d7f4d8eb1e661",
+          "upstream_python": "3.9",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "2f7415cfbc4b6ca62f9013f1abd27136f46b9653"
+        }
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "exhausted",
+        "seconds": 318.0,
+        "telemetry": {
+          "history_compaction_rounds": 3,
+          "tool_errors": 1,
+          "model_rounds": 32,
+          "input_tokens": 929738,
+          "output_tokens": 17672
+        },
+        "grader_image_id": "sha256:e9f7172f899565294f30adf18d90edc24ce370c805ecd12d2df2fe6d15ebdd59",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-pytest-dev-pytest-11148",
+          "image_id": "sha256:e9f7172f899565294f30adf18d90edc24ce370c805ecd12d2df2fe6d15ebdd59",
+          "python": "3.9",
+          "source_tarball_sha256": "2d330522612e789b64668c6a8d20f9925e95aca7d12cdd70ec7d7f4d8eb1e661",
+          "upstream_python": "3.9",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "2f7415cfbc4b6ca62f9013f1abd27136f46b9653"
+        }
+      }
+    },
+    {
+      "id": "pytest-dev__pytest-5692",
+      "benchmark": "swe",
+      "historical": {
+        "passed": true,
+        "agent_status": "exhausted",
+        "seconds": 173.5,
+        "telemetry": {
+          "history_compaction_rounds": 2,
+          "tool_errors": 0,
+          "model_rounds": 24,
+          "input_tokens": 346392,
+          "output_tokens": 8440
+        },
+        "grader_image_id": "sha256:097708a8ed792f925f63e53b6f9ea38151b508bd7d73ba75f6d66bdb084f32f7",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-pytest-dev-pytest-5692",
+          "image_id": "sha256:097708a8ed792f925f63e53b6f9ea38151b508bd7d73ba75f6d66bdb084f32f7",
+          "python": "3.9",
+          "source_tarball_sha256": "4ca99141d7782aea10ae5a3ea19c9b5f37c909a18c696a91936dd4b423926080",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "29e336bd9bf87eaef8e2683196ee1975f1ad4088"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 287.0,
+        "telemetry": {
+          "history_compaction_rounds": 5,
+          "tool_errors": 0,
+          "model_rounds": 31,
+          "input_tokens": 722840,
+          "output_tokens": 9105
+        },
+        "grader_image_id": "sha256:097708a8ed792f925f63e53b6f9ea38151b508bd7d73ba75f6d66bdb084f32f7",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-pytest-dev-pytest-5692",
+          "image_id": "sha256:097708a8ed792f925f63e53b6f9ea38151b508bd7d73ba75f6d66bdb084f32f7",
+          "python": "3.9",
+          "source_tarball_sha256": "4ca99141d7782aea10ae5a3ea19c9b5f37c909a18c696a91936dd4b423926080",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "29e336bd9bf87eaef8e2683196ee1975f1ad4088"
+        }
+      }
+    },
+    {
+      "id": "pytest-dev__pytest-8365",
+      "benchmark": "swe",
+      "historical": {
+        "passed": true,
+        "agent_status": "exhausted",
+        "seconds": 143.4,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 7,
+          "model_rounds": 24,
+          "input_tokens": 234577,
+          "output_tokens": 5466
+        },
+        "grader_image_id": "sha256:4798c01bb11bb6c7a0ab2795a7c3418293ec60d5fe2fba731e7f81dce244ec34",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-pytest-dev-pytest-8365",
+          "image_id": "sha256:4798c01bb11bb6c7a0ab2795a7c3418293ec60d5fe2fba731e7f81dce244ec34",
+          "python": "3.9",
+          "source_tarball_sha256": "972e266e9e055878d90bac983c281243bc7169e70638c2ff9caa25fb61759fb5",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "4964b468c83c06971eb743fbc57cc404f760c573"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 155.8,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 12,
+          "model_rounds": 32,
+          "input_tokens": 384203,
+          "output_tokens": 6970
+        },
+        "grader_image_id": "sha256:4798c01bb11bb6c7a0ab2795a7c3418293ec60d5fe2fba731e7f81dce244ec34",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-pytest-dev-pytest-8365",
+          "image_id": "sha256:4798c01bb11bb6c7a0ab2795a7c3418293ec60d5fe2fba731e7f81dce244ec34",
+          "python": "3.9",
+          "source_tarball_sha256": "972e266e9e055878d90bac983c281243bc7169e70638c2ff9caa25fb61759fb5",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "4964b468c83c06971eb743fbc57cc404f760c573"
+        }
+      }
+    },
+    {
+      "id": "pytest-dev__pytest-5103",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "failed",
+        "seconds": 162.3,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 15,
+          "input_tokens": 147306,
+          "output_tokens": 11388
+        },
+        "grader_image_id": "sha256:6efd5dad6513125eba18a8a655c7e91040a3559aa2925dde29a3eb2d85f235d1",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-pytest-dev-pytest-5103",
+          "image_id": "sha256:6efd5dad6513125eba18a8a655c7e91040a3559aa2925dde29a3eb2d85f235d1",
+          "python": "3.9",
+          "source_tarball_sha256": "ae7b95364f7e6dfeb5d77b3458fe2a02b6446ec23cbf11a748b610cfd60fe413",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "10ca84ffc56c2dd2d9dc4bd71b7b898e083500cd"
+        }
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 366.9,
+        "telemetry": {
+          "history_compaction_rounds": 1,
+          "tool_errors": 0,
+          "model_rounds": 27,
+          "input_tokens": 692443,
+          "output_tokens": 45245
+        },
+        "grader_image_id": "sha256:6efd5dad6513125eba18a8a655c7e91040a3559aa2925dde29a3eb2d85f235d1",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-pytest-dev-pytest-5103",
+          "image_id": "sha256:6efd5dad6513125eba18a8a655c7e91040a3559aa2925dde29a3eb2d85f235d1",
+          "python": "3.9",
+          "source_tarball_sha256": "ae7b95364f7e6dfeb5d77b3458fe2a02b6446ec23cbf11a748b610cfd60fe413",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "10ca84ffc56c2dd2d9dc4bd71b7b898e083500cd"
+        }
+      }
+    },
+    {
+      "id": "pytest-dev__pytest-5495",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "failed",
+        "seconds": 174.8,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 14,
+          "input_tokens": 130950,
+          "output_tokens": 16639
+        },
+        "grader_image_id": "sha256:aac997309da799be1fb1deae595c4b6f3ef3c3a2d1bbb85cb65f94a4ea00d158",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-pytest-dev-pytest-5495",
+          "image_id": "sha256:aac997309da799be1fb1deae595c4b6f3ef3c3a2d1bbb85cb65f94a4ea00d158",
+          "python": "3.9",
+          "source_tarball_sha256": "daa03db91df0a44ef1f58ee2a189627002310d200c2bcac0786598ce10e4fc56",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "1aefb24b37c30fba8fd79a744829ca16e252f340"
+        }
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 242.2,
+        "telemetry": {
+          "history_compaction_rounds": 1,
+          "tool_errors": 0,
+          "model_rounds": 31,
+          "input_tokens": 625374,
+          "output_tokens": 14934
+        },
+        "grader_image_id": "sha256:aac997309da799be1fb1deae595c4b6f3ef3c3a2d1bbb85cb65f94a4ea00d158",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-pytest-dev-pytest-5495",
+          "image_id": "sha256:aac997309da799be1fb1deae595c4b6f3ef3c3a2d1bbb85cb65f94a4ea00d158",
+          "python": "3.9",
+          "source_tarball_sha256": "daa03db91df0a44ef1f58ee2a189627002310d200c2bcac0786598ce10e4fc56",
+          "dependency_source": "source-pinned local SWE-bench 4.1.0 grading environment with offline pip tooling",
+          "source_commit": "1aefb24b37c30fba8fd79a744829ca16e252f340"
+        }
+      }
+    },
+    {
+      "id": "psf__requests-2674",
+      "benchmark": "swe",
+      "ungraded_reason": "fixture_unvalidated",
+      "historical": null,
+      "budget-verification": null
+    },
+    {
+      "id": "psf__requests-2148",
+      "benchmark": "swe",
+      "ungraded_reason": "fixture_unvalidated",
+      "historical": null,
+      "budget-verification": null
+    },
+    {
+      "id": "psf__requests-3362",
+      "benchmark": "swe",
+      "historical": {
+        "passed": false,
+        "agent_status": "exhausted",
+        "seconds": 144.1,
+        "telemetry": {
+          "history_compaction_rounds": 5,
+          "tool_errors": 0,
+          "model_rounds": 24,
+          "input_tokens": 329195,
+          "output_tokens": 10662
+        },
+        "grader_image_id": "sha256:0039f15b34367d01e63ec7ee0d2dbad9c128c33c4c835da8c064664641c3b282",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-psf-requests-3362",
+          "image_id": "sha256:0039f15b34367d01e63ec7ee0d2dbad9c128c33c4c835da8c064664641c3b282",
+          "python": "3.9",
+          "source_tarball_sha256": "156642dda5466fb67948b5ef0d2fe85c3387a09a7653e18ee99b2e000a0a74b2",
+          "dependency_source": "derived from SWE-bench 4.1.0 with pip and Debian substitutes"
+        }
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "completed",
+        "seconds": 137.6,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 26,
+          "input_tokens": 284473,
+          "output_tokens": 7510
+        },
+        "grader_image_id": "sha256:0039f15b34367d01e63ec7ee0d2dbad9c128c33c4c835da8c064664641c3b282",
+        "grading_environment": {
+          "image": "miniclaw-heldout:swe-local-psf-requests-3362",
+          "image_id": "sha256:0039f15b34367d01e63ec7ee0d2dbad9c128c33c4c835da8c064664641c3b282",
+          "python": "3.9",
+          "source_tarball_sha256": "156642dda5466fb67948b5ef0d2fe85c3387a09a7653e18ee99b2e000a0a74b2",
+          "dependency_source": "derived from SWE-bench 4.1.0 with pip and Debian substitutes"
+        }
+      }
+    },
+    {
+      "id": "psf__requests-863",
+      "benchmark": "swe",
+      "ungraded_reason": "fixture_unvalidated",
+      "historical": null,
+      "budget-verification": null
+    },
+    {
+      "id": "raman-fitting",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": false,
+        "agent_status": "failed",
+        "seconds": 215.4,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 14,
+          "input_tokens": 142791,
+          "output_tokens": 14203
+        },
+        "grader_image_id": "sha256:e190417a2c06759ec7ad50f804e590e216c29940c7747788adaf636906c5003c",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 369.9,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 21,
+          "input_tokens": 289811,
+          "output_tokens": 19733
+        },
+        "grader_image_id": "sha256:e190417a2c06759ec7ad50f804e590e216c29940c7747788adaf636906c5003c",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "bn-fit-modify",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": true,
+        "agent_status": "exhausted",
+        "seconds": 363.2,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 24,
+          "input_tokens": 337034,
+          "output_tokens": 17434
+        },
+        "grader_image_id": "sha256:ca7218c6a5c0f14ddb7987b7ae0eb3b7d827482e10570f34392b956192670f26",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "exhausted",
+        "seconds": 346.3,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 32,
+          "input_tokens": 449501,
+          "output_tokens": 19167
+        },
+        "grader_image_id": "sha256:ca7218c6a5c0f14ddb7987b7ae0eb3b7d827482e10570f34392b956192670f26",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "modernize-scientific-stack",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 196.3,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 23,
+          "input_tokens": 255549,
+          "output_tokens": 10411
+        },
+        "grader_image_id": "sha256:64a587bd40561e56b5ff185b810f8b083df7394b2158cb1f5b246b01f55c9a10",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 228.9,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 31,
+          "input_tokens": 477167,
+          "output_tokens": 13667
+        },
+        "grader_image_id": "sha256:64a587bd40561e56b5ff185b810f8b083df7394b2158cb1f5b246b01f55c9a10",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "build-pmars",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": true,
+        "agent_status": "exhausted",
+        "seconds": 247.6,
+        "telemetry": {
+          "history_compaction_rounds": 4,
+          "tool_errors": 2,
+          "model_rounds": 24,
+          "input_tokens": 389721,
+          "output_tokens": 10220
+        },
+        "grader_image_id": "sha256:37ed2de3662e9ae403ee2d60856ce0ed3b9db0a353a6140b83e71b376c11104b",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "timeout",
+        "seconds": 364.9,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 26,
+          "input_tokens": 457896,
+          "output_tokens": 9246
+        },
+        "grader_image_id": "sha256:37ed2de3662e9ae403ee2d60856ce0ed3b9db0a353a6140b83e71b376c11104b",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "sqlite-with-gcov",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": true,
+        "agent_status": "timeout",
+        "seconds": 366.6,
+        "telemetry": {
+          "history_compaction_rounds": 16,
+          "tool_errors": 0,
+          "model_rounds": 22,
+          "input_tokens": 341223,
+          "output_tokens": 14920
+        },
+        "grader_image_id": "sha256:6600f16f5453cb079858fc4d03bab027498066ecce1abab80ff1e5fc44742e59",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 369.7,
+        "telemetry": {
+          "history_compaction_rounds": 10,
+          "tool_errors": 1,
+          "model_rounds": 23,
+          "input_tokens": 866427,
+          "output_tokens": 9796
+        },
+        "grader_image_id": "sha256:6600f16f5453cb079858fc4d03bab027498066ecce1abab80ff1e5fc44742e59",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "overfull-hbox",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": false,
+        "agent_status": "exhausted",
+        "seconds": 315.1,
+        "telemetry": {
+          "history_compaction_rounds": 5,
+          "tool_errors": 5,
+          "model_rounds": 24,
+          "input_tokens": 351714,
+          "output_tokens": 15739
+        },
+        "grader_image_id": null,
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 366.0,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 3,
+          "model_rounds": 29,
+          "input_tokens": 474214,
+          "output_tokens": 19143
+        },
+        "grader_image_id": "sha256:a0f7d003cf4d18b5528bc44a2d248b33d5ab14caec53f7a762a81c457f85e8d8",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "sqlite-db-truncate",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": false,
+        "agent_status": "failed",
+        "seconds": 69.4,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 5,
+          "input_tokens": 19279,
+          "output_tokens": 8980
+        },
+        "grader_image_id": "sha256:206b89eceab2056925e74825b6c32d81fa509609ad6c7286da62cf06e7821efb",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 167.3,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 13,
+          "input_tokens": 232893,
+          "output_tokens": 22630
+        },
+        "grader_image_id": "sha256:206b89eceab2056925e74825b6c32d81fa509609ad6c7286da62cf06e7821efb",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "build-cython-ext",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": false,
+        "agent_status": "exhausted",
+        "seconds": 271.9,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 3,
+          "model_rounds": 24,
+          "input_tokens": 216011,
+          "output_tokens": 4337
+        },
+        "grader_image_id": "sha256:9148ceb60358089de509b387d3b4ac07972445e30daaec624db10607cf5b60f1",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 364.3,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 6,
+          "model_rounds": 29,
+          "input_tokens": 529102,
+          "output_tokens": 7347
+        },
+        "grader_image_id": "sha256:9148ceb60358089de509b387d3b4ac07972445e30daaec624db10607cf5b60f1",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "schemelike-metacircular-eval",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": false,
+        "agent_status": "failed",
+        "seconds": 236.6,
+        "telemetry": {
+          "history_compaction_rounds": 8,
+          "tool_errors": 1,
+          "model_rounds": 20,
+          "input_tokens": 336050,
+          "output_tokens": 27206
+        },
+        "grader_image_id": "sha256:e7444e14d8d481fa4d86b54b10629a25ff6ac1ccd1e98d12fb87a2c2f90d2f9f",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 366.4,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 25,
+          "input_tokens": 660624,
+          "output_tokens": 43724
+        },
+        "grader_image_id": "sha256:e7444e14d8d481fa4d86b54b10629a25ff6ac1ccd1e98d12fb87a2c2f90d2f9f",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "fix-git",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 177.7,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 21,
+          "input_tokens": 122802,
+          "output_tokens": 3438
+        },
+        "grader_image_id": "sha256:7cf6b5533c218d11aa56d28b485af0e3f41138b740ace41303292c55a11893ad",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "completed",
+        "seconds": 167.5,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 0,
+          "model_rounds": 16,
+          "input_tokens": 93938,
+          "output_tokens": 3184
+        },
+        "grader_image_id": "sha256:7cf6b5533c218d11aa56d28b485af0e3f41138b740ace41303292c55a11893ad",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "large-scale-text-editing",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 369.1,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 4,
+          "model_rounds": 14,
+          "input_tokens": 72657,
+          "output_tokens": 6586
+        },
+        "grader_image_id": null,
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 367.4,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 20,
+          "input_tokens": 202542,
+          "output_tokens": 14404
+        },
+        "grader_image_id": null,
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "write-compressor",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": false,
+        "agent_status": "failed",
+        "seconds": 60.2,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 4,
+          "input_tokens": 6505,
+          "output_tokens": 8285
+        },
+        "grader_image_id": "sha256:b97ca189341e0623c813ab86551cd258976a0ce6f1335bb1a59ade220fb48777",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 366.4,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 22,
+          "input_tokens": 284408,
+          "output_tokens": 60064
+        },
+        "grader_image_id": "sha256:b97ca189341e0623c813ab86551cd258976a0ce6f1335bb1a59ade220fb48777",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "query-optimize",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": false,
+        "agent_status": "exhausted",
+        "seconds": 367.2,
+        "telemetry": {
+          "history_compaction_rounds": 5,
+          "tool_errors": 2,
+          "model_rounds": 24,
+          "input_tokens": 334187,
+          "output_tokens": 30734
+        },
+        "grader_image_id": "sha256:a95faa98e10c96f1df4b4152b74bfd76e84ab5cf3c8c0c95cbda6a4e2f43c83f",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 368.0,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 5,
+          "model_rounds": 21,
+          "input_tokens": 204743,
+          "output_tokens": 13470
+        },
+        "grader_image_id": "sha256:a95faa98e10c96f1df4b4152b74bfd76e84ab5cf3c8c0c95cbda6a4e2f43c83f",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "largest-eigenval",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": false,
+        "agent_status": "failed",
+        "seconds": 163.2,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 3,
+          "model_rounds": 11,
+          "input_tokens": 56536,
+          "output_tokens": 14307
+        },
+        "grader_image_id": "sha256:2f5f4e6e1511d01344c500f1d2e0b40d33894662bb13a3fcb2b61906ed98a43f",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": false,
+        "agent_status": "timeout",
+        "seconds": 366.3,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 1,
+          "model_rounds": 29,
+          "input_tokens": 533958,
+          "output_tokens": 38285
+        },
+        "grader_image_id": "sha256:2f5f4e6e1511d01344c500f1d2e0b40d33894662bb13a3fcb2b61906ed98a43f",
+        "grading_environment": null
+      }
+    },
+    {
+      "id": "portfolio-optimization",
+      "benchmark": "terminal",
+      "historical": {
+        "passed": true,
+        "agent_status": "exhausted",
+        "seconds": 176.4,
+        "telemetry": {
+          "history_compaction_rounds": 7,
+          "tool_errors": 0,
+          "model_rounds": 24,
+          "input_tokens": 440722,
+          "output_tokens": 20626
+        },
+        "grader_image_id": "sha256:74c1a45a1e64bccccaa41df5c4e12b485f04937171bafa83cd193965f07e8160",
+        "grading_environment": null
+      },
+      "budget-verification": {
+        "passed": true,
+        "agent_status": "timeout",
+        "seconds": 364.3,
+        "telemetry": {
+          "history_compaction_rounds": 0,
+          "tool_errors": 3,
+          "model_rounds": 28,
+          "input_tokens": 531514,
+          "output_tokens": 32664
+        },
+        "grader_image_id": "sha256:74c1a45a1e64bccccaa41df5c4e12b485f04937171bafa83cd193965f07e8160",
+        "grading_environment": null
+      }
+    }
+  ]
+}

@@ -3,7 +3,13 @@ import json
 import pytest
 
 from miniclaw.agent.limits import RunLimits
-from miniclaw.agent.loop import AgentLoop, CompletionChecked, ContextInjected, RunFailed
+from miniclaw.agent.loop import (
+    AgentLoop,
+    ArtifactsReady,
+    CompletionChecked,
+    ContextInjected,
+    RunFailed,
+)
 from miniclaw.agent.state import RunStatus
 from miniclaw.app import create_app
 from miniclaw.cli.repl import AppRepl
@@ -306,6 +312,44 @@ async def test_docker_verification_runs_after_artifacts_exist_and_can_request_a_
         assert not (app.config.workspace / 'result.json').exists()
     finally:
         await app.aclose()
+
+
+@pytest.mark.parametrize(('mode', 'reminders', 'ready_turn'), [
+    ('generated', (2,), 1), ('preexisting', (1,), 0), ('same-batch', (), 1), ('inactive', (), 1),
+])
+async def test_ready_artifacts_prompt_the_next_available_verification(tmp_path, mode, reminders, ready_turn):
+    draft = tmp_path / 'draft.txt'
+    registry = ToolRegistry()
+    for tool in make_file_tools():
+        registry.register(tool)
+    write = ToolCallDelta(0, 'write-draft', 'write_file', '{"path":"draft.txt","content":"done"}')
+    check = ToolCallDelta(int(mode == 'same-batch'), 'check-draft', 'verify_workspace', '{}')
+    done = (TextDelta('done'), ResponseCompleted('stop'))
+    if mode == 'preexisting':
+        draft.write_text('done')
+        turns = ((check, ResponseCompleted('tool_calls')), done)
+    elif mode == 'same-batch':
+        turns = ((write, check, ResponseCompleted('tool_calls')), done)
+    elif mode == 'inactive':
+        turns = ((write, ResponseCompleted('tool_calls')), done)
+    else:
+        turns = ((write, ResponseCompleted('tool_calls')), (check, ResponseCompleted('tool_calls')), done)
+
+    async def verify(path):
+        assert (path / 'draft.txt').is_file()
+        return None
+
+    model = ScriptedModel(turns)
+    result = await AgentLoop(model, 'fake', tools=registry, workspace=tmp_path).run(
+        'create a draft', required_artifacts=('draft.txt',), completion_check=verify,
+        active_verification=mode != 'inactive',
+    )
+    assert result.status is RunStatus.COMPLETED
+    assert any(event.payload == ArtifactsReady(ready_turn) for event in result.events)
+    observed = tuple(index for index, request in enumerate(model.requests, 1)
+                     if request.messages[-1].role == 'user'
+                     and 'Call verify_workspace next' in request.messages[-1].content[0].text)
+    assert observed == reminders
 
 
 @pytest.mark.parametrize(('failures', 'threshold'), [
