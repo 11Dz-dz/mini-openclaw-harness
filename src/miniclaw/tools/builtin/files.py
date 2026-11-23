@@ -74,10 +74,21 @@ def _search_files(path: Path):
             yield Path(directory) / name
 
 
-def _find_text(workspace: Path, path: Path, pattern: str, max_results: int) -> str:
+def _original_offset(line: str, folded_offset: int) -> int:
+    for index, character in enumerate(line):
+        folded_offset -= len(character.casefold())
+        if folded_offset < 0:
+            return index
+    return len(line)
+
+
+def _find_text(
+    workspace: Path, path: Path, pattern: str, max_results: int, *, ignore_case: bool = False,
+) -> str:
     matches = []
     scanned = 0
     output_bytes = 0
+    needle = pattern.casefold() if ignore_case else pattern
     for index, candidate in enumerate(_search_files(path), 1):
         if index > MAX_SEARCH_FILES or scanned >= MAX_SEARCH_BYTES:
             return '\n'.join([*matches, '[Search limit reached. Narrow the path to continue.]'])
@@ -85,9 +96,10 @@ def _find_text(workspace: Path, path: Path, pattern: str, max_results: int) -> s
             details = candidate.lstat()
             if not stat.S_ISREG(details.st_mode) or details.st_size > MAX_FILE_READ_BYTES:
                 continue
-            if not candidate.resolve().is_relative_to(workspace):
+            resolved = candidate.resolve(strict=True)
+            if not resolved.is_relative_to(workspace):
                 continue
-            with candidate.open('rb') as stream:
+            with resolved.open('rb') as stream:
                 data = stream.read(min(MAX_FILE_READ_BYTES, MAX_SEARCH_BYTES - scanned) + 1)
             scanned += len(data)
             if scanned > MAX_SEARCH_BYTES:
@@ -95,13 +107,16 @@ def _find_text(workspace: Path, path: Path, pattern: str, max_results: int) -> s
             if len(data) > MAX_FILE_READ_BYTES or b'\0' in data:
                 continue
             lines = data.decode('utf-8').splitlines()
-        except (OSError, UnicodeDecodeError):
+        except (OSError, RuntimeError, UnicodeDecodeError):
             continue
-        relative = candidate.relative_to(workspace).as_posix()
+        relative = resolved.relative_to(workspace).as_posix()
         for lineno, line in enumerate(lines, 1):
-            offset = line.find(pattern)
+            haystack = line.casefold() if ignore_case else line
+            offset = haystack.find(needle)
             if offset < 0:
                 continue
+            if len(haystack) != len(line):
+                offset = _original_offset(line, offset)
             start = max(0, offset - 100)
             excerpt = ('…' if start else '') + line[start:start + 400]
             if start + 400 < len(line):
@@ -119,8 +134,10 @@ async def search_text(
 ) -> str:
     workspace = context.workspace.resolve()
     path = resolve_workspace_path(workspace, str(arguments.get('path', '.')), mounts=mounts)
-    return await asyncio.to_thread(_find_text, workspace, path, str(arguments['pattern']),
-                                   int(arguments.get('max_results', 40)))
+    return await asyncio.to_thread(
+        _find_text, workspace, path, str(arguments['pattern']), int(arguments.get('max_results', 40)),
+        ignore_case=bool(arguments.get('ignore_case', False)),
+    )
 
 
 async def write_file(
@@ -265,7 +282,7 @@ def make_file_tools(
         RegisteredTool(
             ToolSpec(
                 "search_text",
-                "Search UTF-8 workspace files for literal case-sensitive text. "
+                "Search UTF-8 workspace files for literal text (case-sensitive by default). "
                 "Return file:line:match and use read_file on the relevant lines. "
                 "Search a directory recursively or one file, skipping binary files and common dependency caches.",
                 {
@@ -274,6 +291,7 @@ def make_file_tools(
                         "pattern": {"type": "string", "minLength": 1, "maxLength": 256},
                         "path": path_schema,
                         "max_results": {"type": "integer", "minimum": 1, "maximum": 100},
+                        "ignore_case": {"type": "boolean", "description": "Match case-insensitively when true"},
                     },
                     "required": ["pattern"],
                     **closed_object,

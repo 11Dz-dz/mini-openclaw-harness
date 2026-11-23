@@ -1,3 +1,4 @@
+from miniclaw.observability.redaction import Redactor
 from miniclaw.permissions.policy import DefaultPermissionPolicy
 from miniclaw.permissions.types import PermissionDecision
 from miniclaw.tools.types import RiskLevel, ToolCapabilities
@@ -36,3 +37,22 @@ def test_undeclared_secret_is_denied() -> None:
         arguments={"api_key": "hidden"},
     )
     assert result.decision is PermissionDecision.DENY
+
+
+def test_nested_credential_keys_are_denied_and_redacted() -> None:
+    arguments = {"requests": [{"headers": {"X-Auth-Token": "synthetic"}}]}
+    result = DefaultPermissionPolicy().evaluate(
+        tool_name="custom_call", capabilities=ToolCapabilities(), arguments=arguments,
+    )
+    assert result.decision is PermissionDecision.DENY
+    assert Redactor().redact(arguments) == {
+        "requests": [{"headers": {"X-Auth-Token": "[REDACTED]"}}],
+    }
+
+
+def test_nested_tokenizer_options_are_allowed() -> None:
+    result = DefaultPermissionPolicy().evaluate(
+        tool_name="custom_call", capabilities=ToolCapabilities(),
+        arguments={"options": {"max_tokens": 8, "tokenizer": "word", "cookie_count": 2}},
+    )
+    assert result.decision is PermissionDecision.ALLOW

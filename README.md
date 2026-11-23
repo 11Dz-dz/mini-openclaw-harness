@@ -125,7 +125,7 @@ miniclaw
 
 | 类别 | 工具 |
 | --- | --- |
-| 文件 | `read_file` `write_file` |
+| 文件 | `read_file` `search_text` `write_file` `replace_text` |
 | 执行 | `run_command`（沙箱内，需审批） |
 | 版本控制 | `git_status` `git_log` `git_diff` `git_show`（只读，自动放行） |
 | 网络 | `fetch_url`（含 SSRF 防护） `web_search`（需配置端点） |

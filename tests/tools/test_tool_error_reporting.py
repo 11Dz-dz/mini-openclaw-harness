@@ -110,3 +110,16 @@ async def test_empty_value_error_falls_back_to_the_type(tmp_path: Path) -> None:
     result = await _run(handler, tmp_path)
 
     assert "ValueError" in result.output
+
+
+async def test_schema_error_does_not_echo_unknown_keys(tmp_path: Path) -> None:
+    async def handler(arguments, context):
+        pytest.fail("invalid tool call reached the handler")
+
+    result = await ToolExecutor(_registry(handler)).execute(
+        ToolCall("call-2", "boom", {"synthetic-key": 1}),
+        ToolContext("run-1", "session-1", tmp_path),
+    )
+
+    assert result.is_error
+    assert result.output == "tool arguments invalid: $: unexpected property"

@@ -2,6 +2,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 
 class RiskLevel(StrEnum):
@@ -13,8 +14,8 @@ class RiskLevel(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ToolCapabilities:
-    filesystem: str = "none"
-    network: str = "deny"
+    filesystem: Literal["none", "read", "workspace-write"] = "none"
+    network: Literal["deny", "unrestricted"] = "deny"
     subprocess: bool = False
     secrets: tuple[str, ...] = ()
     risk_level: RiskLevel = RiskLevel.LOW

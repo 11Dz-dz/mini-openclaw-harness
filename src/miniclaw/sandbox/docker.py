@@ -1,7 +1,9 @@
 import asyncio
 import os
 import re
+from contextlib import suppress
 from pathlib import PurePosixPath
+from time import monotonic
 from uuid import uuid4
 
 from miniclaw.sandbox.capabilities import SandboxCapabilities, SandboxStrength
@@ -15,6 +17,23 @@ from miniclaw.sandbox.types import (
     SandboxTimeout,
 )
 from miniclaw.workspace.diff import changed_paths, snapshot_files
+
+CAPABILITIES_CACHE_SECONDS = 5.0
+DOCKER_RUN_ERROR = 125
+
+
+async def _remove_container(name: str) -> None:
+    with suppress(OSError):
+        cleanup = await asyncio.create_subprocess_exec(
+            "docker", "rm", "-f", name,
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+        )
+        try:
+            await asyncio.wait_for(cleanup.wait(), 3)
+        except TimeoutError:
+            with suppress(ProcessLookupError):
+                cleanup.kill()
+            await cleanup.wait()
 
 
 class DockerSandbox:
@@ -31,8 +50,13 @@ class DockerSandbox:
             raise ValueError("Docker workspace aliases must be top-level container paths")
         self.image = image
         self.workspace_mounts = tuple(dict.fromkeys(("/workspace", *workspace_aliases)))
+        self._cached_capabilities: tuple[float, SandboxCapabilities] | None = None
 
     async def capabilities(self) -> SandboxCapabilities:
+        cached = self._cached_capabilities
+        if cached is not None and monotonic() < cached[0]:
+            return cached[1]
+        self._cached_capabilities = None
         for argv, failure_reason in (
             (
                 ("docker", "version", "--format", "{{.Server.Version}}"),
@@ -58,7 +82,7 @@ class DockerSandbox:
                 return self._unavailable("docker capability output exceeded limit")
             if process.returncode != 0:
                 return self._unavailable(failure_reason)
-        return SandboxCapabilities(
+        report = SandboxCapabilities(
             True,
             SandboxStrength.STRONG,
             True,
@@ -66,6 +90,8 @@ class DockerSandbox:
             True,
             "docker strong sandbox is available",
         )
+        self._cached_capabilities = (monotonic() + CAPABILITIES_CACHE_SECONDS, report)
+        return report
 
     async def execute(
         self,
@@ -121,6 +147,8 @@ class DockerSandbox:
             "--network",
             "none",
             "--read-only",
+            "--tmpfs",
+            "/tmp:rw,nosuid,nodev,size=256m",
             "--pids-limit",
             "64",
             "--memory",
@@ -135,26 +163,27 @@ class DockerSandbox:
             *command.argv,
         )
         before = snapshot_files(workspace)
-        process = await asyncio.create_subprocess_exec(
-            *argv,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *argv,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except OSError:
+            self._cached_capabilities = None
+            raise
+        completed = False
         try:
             stdout, stderr = await communicate_bounded(
                 process, policy.max_output_bytes, policy.timeout_seconds)
+            completed = True
         except TimeoutError as exc:
             raise SandboxTimeout("docker process exceeded time limit") from exc
         finally:
-            # A killed Docker CLI may leave its container running.
-            cleanup = await asyncio.create_subprocess_exec(
-                'docker', 'rm', '-f', container_name,
-                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-            try:
-                await asyncio.wait_for(cleanup.wait(), 3)
-            except TimeoutError:
-                cleanup.kill()
-                await cleanup.wait()
+            # A reaped Docker CLI may have lost contact with a still-running container.
+            if not completed or process.returncode == DOCKER_RUN_ERROR:
+                self._cached_capabilities = None
+                await _remove_container(container_name)
         after = snapshot_files(workspace)
         return SandboxResult(
             process.returncode,

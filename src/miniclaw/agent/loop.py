@@ -44,8 +44,9 @@ from miniclaw.sessions.events import JsonlEventStore
 from miniclaw.sessions.recovery import close_interrupted_tool_calls
 from miniclaw.sessions.types import Checkpoint, RunRecord, SessionRecord
 from miniclaw.tools.assembler import ToolCallAssembler
-from miniclaw.tools.executor import ToolExecutor
+from miniclaw.tools.executor import ToolExecutor, argument_error_result
 from miniclaw.tools.registry import ToolRegistry
+from miniclaw.tools.schema import validate_arguments
 from miniclaw.tools.types import RegisteredTool, ToolCapabilities, ToolContext, ToolSpec
 from miniclaw.workspace.paths import WorkspaceEscape, resolve_workspace_path
 
@@ -725,7 +726,7 @@ class AgentLoop:
                 messages.append(Message("assistant", assistant_content,
                                         "".join(reasoning) if reasoning else None))
                 await checkpoint()
-                decisions: list[tuple[object, bool]] = []
+                decisions: list[tuple[ToolCall, ToolResultContent | None]] = []
                 context = ToolContext(
                     run_id,
                     session_id,
@@ -734,6 +735,7 @@ class AgentLoop:
                 )
                 for call in calls:
                     frozen_arguments = canonical_arguments(call.arguments)
+                    frozen_call = ToolCall(call.id, call.name, json.loads(frozen_arguments))
                     allowed = True
                     # Approval cannot provide a missing isolation capability.
                     # ToolExecutor refuses unavailable calls before dispatch.
@@ -747,10 +749,15 @@ class AgentLoop:
                             registered = registry.get(call.name)
                     if (self.permission_policy is not None and not unavailable
                             and registered is not None):
+                        try:
+                            validate_arguments(registered.spec.parameters, frozen_call.arguments)
+                        except ToolArgumentsInvalid as error:
+                            decisions.append((frozen_call, argument_error_result(call.id, error)))
+                            continue
                         evaluation = self.permission_policy.evaluate(
                             tool_name=call.name,
                             capabilities=registered.spec.capabilities,
-                            arguments=call.arguments,
+                            arguments=json.loads(frozen_arguments),
                         )
                         if evaluation.decision is PermissionDecision.DENY:
                             allowed = False
@@ -765,7 +772,7 @@ class AgentLoop:
                                 run_id,
                                 call.id,
                                 call.name,
-                                arguments_preview(call.arguments),
+                                arguments_preview(frozen_call.arguments),
                                 registered.spec.capabilities,
                                 evaluation.reason,
                             )
@@ -796,9 +803,10 @@ class AgentLoop:
                             )
                     # Execute the exact reviewed snapshot, even if another
                     # object retained a reference to the mutable arguments.
-                    decisions.append((ToolCall(call.id, call.name,
-                                              json.loads(frozen_arguments)), allowed))
-                any_allowed = any(allowed for _, allowed in decisions)
+                    rejection = None if allowed else ToolResultContent(
+                        call.id, "permission denied", is_error=True)
+                    decisions.append((frozen_call, rejection))
+                any_allowed = any(rejection is None for _, rejection in decisions)
                 target = (
                     RunStatus.EXECUTING_TOOLS
                     if any_allowed
@@ -806,11 +814,8 @@ class AgentLoop:
                 )
                 status = transition(status, target)
                 recovered = False
-                for call, allowed in decisions:
-                    if allowed:
-                        result = await executor.execute(call, context)
-                    else:
-                        result = ToolResultContent(call.id, "permission denied", is_error=True)
+                for call, rejection in decisions:
+                    result = rejection if rejection is not None else await executor.execute(call, context)
                     tool_calls_used += 1
                     # Persist each outcome before dispatching the next tool.
                     messages.append(Message("tool", (result,)))

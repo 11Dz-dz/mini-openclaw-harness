@@ -1,17 +1,20 @@
 import re
 from collections.abc import Mapping
 
+_SENSITIVE_KEYS = frozenset({
+    "authorization", "proxyauthorization", "apikey", "xapikey",
+    "token", "accesstoken", "refreshtoken", "authtoken", "xauthtoken", "bearertoken",
+    "secret", "clientsecret", "secretaccesskey", "privatekey", "accesskeyid",
+    "password", "passwd", "credential", "credentials", "cookie", "setcookie",
+})
+_KEY_SEPARATORS = re.compile(r"[\s_-]+")
+
+
+def is_sensitive_key(key: str) -> bool:
+    return _KEY_SEPARATORS.sub("", key.casefold()) in _SENSITIVE_KEYS
+
 
 class Redactor:
-    _sensitive_keys = {
-        "authorization",
-        "api_key",
-        "token",
-        "secret",
-        "password",
-        "cookie",
-        "set-cookie",
-    }
 
     def __init__(self, secrets: tuple[str, ...] = (), *, truncate: bool = True) -> None:
         self.secrets = tuple(secret for secret in secrets if secret)
@@ -36,7 +39,7 @@ class Redactor:
             return {
                 str(key): (
                     "[REDACTED]"
-                    if str(key).casefold() in self._sensitive_keys
+                    if is_sensitive_key(str(key))
                     else self.redact(item, _depth=_depth + 1)
                 )
                 for key, item in value.items()

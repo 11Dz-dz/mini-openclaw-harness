@@ -194,6 +194,50 @@ async def test_search_text_returns_literal_matches_and_stays_inside_workspace(tm
     assert escaped.is_error
 
 
+async def test_search_text_resolves_symlink_paths_inside_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    source = workspace / "source"
+    source.mkdir(parents=True)
+    (source / "sample.txt").write_text("Needle\n", encoding="utf-8")
+    alias = tmp_path / "workspace-alias"
+    try:
+        alias.symlink_to(workspace, target_is_directory=True)
+        (workspace / "source-alias").symlink_to(source, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlinks unavailable")
+    registry = ToolRegistry()
+    for tool in make_file_tools():
+        registry.register(tool)
+    result = await ToolExecutor(registry).execute(
+        ToolCall("alias", "search_text", {"pattern": "needle", "path": "source-alias", "ignore_case": True}),
+        ToolContext("run", "session", alias),
+    )
+    assert not result.is_error
+    assert result.output == "source/sample.txt:1:Needle"
+
+
+async def test_search_text_casefold_preserves_the_original_excerpt(tmp_path: Path) -> None:
+    long_line = "ß" * 450 + "TARGET"
+    (tmp_path / "sample.txt").write_text(long_line + "\nStraße\n", encoding="utf-8")
+    registry = ToolRegistry()
+    for tool in make_file_tools():
+        registry.register(tool)
+    executor = ToolExecutor(registry)
+    context = ToolContext("run", "session", tmp_path)
+    default = await executor.execute(ToolCall("default", "search_text", {"pattern": "target"}), context)
+    long_match = await executor.execute(
+        ToolCall("long", "search_text", {"pattern": "target", "ignore_case": True}), context,
+    )
+    folded_match = await executor.execute(
+        ToolCall("folded", "search_text", {"pattern": "STRASSE", "ignore_case": True}), context,
+    )
+    assert default.output == "No matches found."
+    assert not long_match.is_error
+    assert long_match.output == "sample.txt:1:…" + "ß" * 100 + "TARGET"
+    assert not folded_match.is_error
+    assert folded_match.output == "sample.txt:2:Straße"
+
+
 async def test_agent_changes_only_sandbox_workspace(
     tmp_path: Path,
     monkeypatch,

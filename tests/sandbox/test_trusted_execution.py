@@ -219,9 +219,18 @@ async def test_git_approval_mcp_disabled_and_file_tool_ownership(tmp_path, execu
 
 
 async def test_unavailable_trusted_backend_never_falls_back(tmp_path, monkeypatch):
+    import pwd
+
     async def fail(*args, **kwargs):
         pytest.fail("strong backend must not be probed as a trusted fallback")
 
+    def missing_account(name):
+        assert name == "missing_miniclaw_test_account"
+        raise KeyError(name)
+
+    # Only a root process uses the configured execution account.
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(pwd, "getpwnam", missing_account)
     monkeypatch.setattr("miniclaw.app.DockerSandbox.capabilities", fail)
     with pytest.raises(ApplicationConfigurationError, match="does not exist"):
         await create_app(MiniClawConfig(tmp_path / "state", tmp_path / "project",

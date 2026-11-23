@@ -12,6 +12,12 @@ logger = logging.getLogger(__name__)
 MAX_REASON_CHARACTERS = 300
 
 
+def argument_error_result(call_id: str, error: ToolArgumentsInvalid) -> ToolResultContent:
+    detail = " ".join(str(error).split())[:MAX_REASON_CHARACTERS]
+    message = f"tool arguments invalid: {detail}" if detail else "tool arguments invalid"
+    return ToolResultContent(call_id, message, is_error=True)
+
+
 class ToolExecutor:
     def __init__(
         self,
@@ -32,7 +38,10 @@ class ToolExecutor:
                 return ToolResultContent(
                     call.id, f"tool unavailable: {reason}", is_error=True
                 )
-            arguments = validate_arguments(tool.spec.parameters, call.arguments)
+            try:
+                arguments = validate_arguments(tool.spec.parameters, call.arguments)
+            except ToolArgumentsInvalid as error:
+                return argument_error_result(call.id, error)
             output = await tool.handler(arguments, context)
             execution_id = None
             if self.registry.execution_recorder is not None:

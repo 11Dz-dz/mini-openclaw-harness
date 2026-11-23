@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 
+from miniclaw.observability.redaction import is_sensitive_key
 from miniclaw.permissions.types import PermissionDecision, PermissionEvaluation
 from miniclaw.tools.types import RiskLevel, ToolCapabilities
 
@@ -26,11 +27,7 @@ class DefaultPermissionPolicy:
                 capabilities.side_effects, capabilities.idempotent))
         ):
             return PermissionEvaluation(PermissionDecision.DENY, "unknown capability value")
-        secret_keys = {"api_key", "token", "secret", "password"}
-        if (
-            any(key.casefold() in secret_keys for key in arguments)
-            and not capabilities.secrets
-        ):
+        if not capabilities.secrets and _contains_sensitive_key(arguments):
             return PermissionEvaluation(
                 PermissionDecision.DENY, "undeclared secret request"
             )
@@ -93,3 +90,14 @@ class DefaultPermissionPolicy:
                 "read-only inspection tool",
             )
         return PermissionEvaluation(PermissionDecision.ASK, "tool has side effects")
+
+
+def _contains_sensitive_key(value: object) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            (isinstance(key, str) and is_sensitive_key(key)) or _contains_sensitive_key(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_sensitive_key(item) for item in value)
+    return False

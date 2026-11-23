@@ -181,11 +181,17 @@ def _validate(schema, value, path='$'):
             fail('not constraint failed')
     if isinstance(value, dict):
         properties = schema.get('properties', {})
-        if any(key not in value for key in schema.get('required', [])):
-            fail('missing required property')
+        missing = next((key for key in schema.get('required', []) if key not in value), None)
+        if missing is not None:
+            raise ToolArgumentsInvalid(f'{path}.{missing}: missing required property')
         additional = schema.get('additionalProperties', True)
         for key, child in value.items():
-            _validate(properties.get(key, additional), child, f'{path}.{key}')
+            if key in properties:
+                _validate(properties[key], child, f'{path}.{key}')
+            elif additional is False:
+                fail('unexpected property')
+            else:
+                _validate(additional, child, f'{path}.*')
     if isinstance(value, list):
         for index, child in enumerate(value):
             _validate(schema.get('items', True), child, f'{path}[{index}]')
