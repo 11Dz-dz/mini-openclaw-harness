@@ -1,43 +1,37 @@
-# DeepSeek
+# DeepSeek 接入
 
-The model client uses the Chat Completions API and supports streamed
-`reasoning_content` alongside visible text and tool calls. Protocol reasoning
-is retained on assistant messages, counted in context budgets, and saved in
-owner-only checkpoints for subsequent requests and session recovery. It is not
-printed as the answer or emitted as reasoning events to the audit/trace streams.
-Existing checkpoints without this optional field remain readable.
+[返回首页](../README.md)
 
-## Configuration
+MiniClaw 使用 OpenAI 兼容的 Chat Completions 接口。Base URL 和模型 ID 需要对应你的 API 平台及服务地域。配置向导会以隐藏输入读取 API Key。
 
-The default configuration for a root login is `/root/.miniclaw/config.toml`.
-Create/edit it through the CLI to retain owner-only file permissions:
-
-```sh
-conda activate harness
-miniclaw config set base_url https://api.deepseek.com
-miniclaw config set model deepseek-flash
-miniclaw config set workspace /root/rivermind-data/mini-openclaw-harness
-miniclaw config set api_key
+```bash
+uv run miniclaw config init
+uv run miniclaw --workspace /path/to/your/project
 ```
 
-The last command asks for the API key without echoing it. Manual TOML string
-values, including the API key, must be quoted; the file must have mode 600.
-Environment values such as `OPENAI_API_KEY`, `OPENAI_MODEL`, and
-`OPENAI_BASE_URL` override the corresponding saved settings.
+已有配置时，可逐项更新。以下命令中的地域和工作空间只是格式示例，请按服务商文档填写实际值。
 
-```sh
-cd /root/rivermind-data/mini-openclaw-harness
-miniclaw --execution-mode trusted
+```bash
+uv run miniclaw config set base_url 'https://YOUR-WORKSPACE.cn-beijing.maas.aliyuncs.com/compatible-mode/v1'
+uv run miniclaw config set model YOUR-MODEL-ID
+uv run miniclaw config set api_key
 ```
 
-The explicit flag enables the existing non-root host execution backend and
-does not change the saved execution mode. Shell/Git calls still require approval.
+- DeepSeek 官方接口的 Base URL 和思考模式见 [DeepSeek API 文档](https://api-docs.deepseek.com/guides/thinking_mode/)。
+- 百炼的地域端点、可用模型与密钥要求见 [阿里云百炼 DeepSeek API 文档](https://www.alibabacloud.com/help/en/model-studio/deepseek-api)。
 
-The provider's default thinking behavior is retained; no thinking toggle or
-reasoning-effort setting is introduced by this change. The configured output
-reserve includes both reasoning and answer tokens. Increase it together with
-the context budget for tasks requiring longer outputs, keeping the reserve
-smaller than the total budget. A saved checkpoint retains credential redaction;
-it is not a byte-for-byte archive of raw provider responses.
+配置默认位于 `~/.miniclaw/config.toml`。`uv run miniclaw config path` 可确认实际路径。环境变量
+`OPENAI_BASE_URL`、`OPENAI_MODEL` 和 `OPENAI_API_KEY` 会覆盖对应的 TOML 配置。
 
-Official protocol: https://api-docs.deepseek.com/guides/thinking_mode/
+## 思考模式与工具调用
+
+MiniClaw 能从流式响应读取 `reasoning_content`，并在同一任务的工具续轮中把它随
+assistant 消息发送给提供方。它参与请求预算并保存在脱敏后的检查点中。可见回答与审计
+事件流省略推理正文。早期没有该字段的检查点仍可读。
+
+普通请求采用提供方默认的思考设置。针对已识别的百炼 DeepSeek 部署，反复出现输出截断且
+未发出工具调用时，可触发临时关闭思考的恢复逻辑。这个行为取决于模型 ID 和端点识别，
+第三方兼容接口的行为以实际提供方为准。
+
+输出预算预留包含网关计入输出消耗的推理和回答 Token。在增大输出预留时要留出输入空间，
+并保持 `reserve_output_tokens` 小于 `context_tokens`。具体预算见 [评测说明](benchmarks/README.md)。

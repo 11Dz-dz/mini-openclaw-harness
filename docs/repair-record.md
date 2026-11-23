@@ -1,6 +1,6 @@
 # Harness 逐项修复记录
 
-日期：2026-10-26。项目：`/root/rivermind-data/mini-openclaw-harness/`；Conda 环境：`harness`。
+本记录对应 2026-10-26 的历史修复。问题清单见[初始审计](archive/baseline-audit.md)，当前启动方式见[仓库首页](../README.md)。
 
 原审计修复队列 R01–R28 均已实施；R29–R32 是复核和低优先级补充。每包有服务器备份、SHA256 清单和独立补丁。
 

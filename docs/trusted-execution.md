@@ -1,5 +1,7 @@
 # Trusted host execution
 
+[Back to usage](usage.md)
+
 `trusted` enables Shell and Git on a POSIX machine without Docker. It is an
 explicit trust decision: it does not provide filesystem, network, CPU, memory,
 or process-count isolation. Commands can access the host resources available to
@@ -16,9 +18,7 @@ Writes outside that copy are not covered by `/changes` or `/apply`.
 Enable for one invocation:
 
 ```sh
-conda activate harness
-cd /root/rivermind-data/mini-openclaw-harness
-miniclaw --execution-mode trusted
+uv run miniclaw --workspace /path/to/your/project --execution-mode trusted
 ```
 
 The normal model/API configuration is still required. Startup and `/sandbox`
