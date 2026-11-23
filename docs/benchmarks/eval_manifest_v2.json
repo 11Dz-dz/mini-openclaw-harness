@@ -1,0 +1,1071 @@
+{
+  "schema_version": 1,
+  "model": {
+    "name": "deepseek-v4.1-flash",
+    "provider": "Alibaba Cloud Model Studio"
+  },
+  "datasets": {
+    "swe": {
+      "name": "SWE-bench Lite",
+      "repository": "SWE-bench/SWE-bench_Lite",
+      "revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2"
+    },
+    "terminal": {
+      "name": "Terminal-Bench 2.1",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "revision": "12b7565679ce5006230b820666353673a133db93"
+    }
+  },
+  "sampling": {
+    "swe_seed": "miniclaw-heldout-ab-v1",
+    "swe_method": "Within each repository, stratify by reference patch file count and changed-line count; then sort by seeded SHA-256 of task ID within each stratum.",
+    "terminal_method": "Three tasks from each of five work categories; easy, medium and hard labels from upstream metadata. Selected text-addressable tasks and excluded development IDs."
+  },
+  "experiment": {
+    "split": "heldout",
+    "repeats_per_version": 1,
+    "max_concurrent_agent_runs": 4,
+    "comparison": "Historical and budget-verification configurations retain native context, turn and tool budgets.",
+    "versions": {
+      "historical": {
+        "source_tree_sha256": "f86a73b873e94a3f0af5c99bb5e0194a9ab3c14a4b54082639e3eecd9e67681c",
+        "context_tokens": 36000,
+        "max_output_tokens": 8000,
+        "max_turns": 24,
+        "max_tool_calls": 48,
+        "case_timeout_seconds": 360,
+        "reconstruction": [
+          {
+            "archive": "hard-case-budget-verification.zip",
+            "source_files_reversed": 1
+          },
+          {
+            "archive": "hard-case-coding-efficiency.zip",
+            "source_files_reversed": 3
+          },
+          {
+            "archive": "hard-case-recovery-tuning.zip",
+            "source_files_reversed": 2
+          },
+          {
+            "archive": "hard-case-breaker.zip",
+            "source_files_reversed": 7
+          },
+          {
+            "archive": "hard-case-batch2.zip",
+            "source_files_reversed": 5
+          },
+          {
+            "archive": "hard-case-batch1-r3.zip",
+            "source_files_reversed": 10
+          },
+          {
+            "archive": "miniclaw-first-six/workspace-verification.zip",
+            "source_files_reversed": 8
+          },
+          {
+            "archive": "miniclaw-first-six/completion-recovery.zip",
+            "source_files_reversed": 3
+          }
+        ]
+      },
+      "budget-verification": {
+        "source_tree_sha256": "effd049d03b317e36f39555977612456299f448feef542f2f2ad6b2a0bfd6b88",
+        "context_tokens": 64000,
+        "max_output_tokens": 8000,
+        "max_turns": 32,
+        "max_tool_calls": 64,
+        "case_timeout_seconds": 360
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "cancel-async-tasks",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "hard",
+      "difficulty_source": "upstream task.toml",
+      "split": "dev"
+    },
+    {
+      "id": "constraints-scheduling",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "split": "dev"
+    },
+    {
+      "id": "gcode-to-text",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "split": "dev"
+    },
+    {
+      "id": "llm-inference-batching-scheduler",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "hard",
+      "difficulty_source": "upstream task.toml",
+      "split": "dev"
+    },
+    {
+      "id": "log-summary-date-ranges",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "split": "dev"
+    },
+    {
+      "id": "merge-diff-arc-agi-task",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "split": "dev"
+    },
+    {
+      "id": "multi-source-data-merger",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "split": "dev"
+    },
+    {
+      "id": "regex-chess",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "hard",
+      "difficulty_source": "upstream task.toml",
+      "split": "dev"
+    },
+    {
+      "id": "regex-log",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "split": "dev"
+    },
+    {
+      "id": "sympy__sympy-11400",
+      "benchmark": "swe",
+      "repository": "sympy/sympy",
+      "commit": "8dcb12a6cf500e8738d6729ab954a261758f49ca",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": null,
+      "difficulty_source": "not labeled by Lite",
+      "split": "dev"
+    },
+    {
+      "id": "sympy__sympy-12236",
+      "benchmark": "swe",
+      "repository": "sympy/sympy",
+      "commit": "d60497958f6dea7f5e25bc41e9107a6a63694d01",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": null,
+      "difficulty_source": "not labeled by Lite",
+      "split": "dev"
+    },
+    {
+      "id": "sympy__sympy-12419",
+      "benchmark": "swe",
+      "repository": "sympy/sympy",
+      "commit": "479939f8c65c8c2908bbedc959549a257a7c0b0b",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": null,
+      "difficulty_source": "not labeled by Lite",
+      "split": "dev"
+    },
+    {
+      "id": "sympy__sympy-12454",
+      "benchmark": "swe",
+      "repository": "sympy/sympy",
+      "commit": "d3fcdb72bfcbb560eb45264ac1c03f359436edef",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": null,
+      "difficulty_source": "not labeled by Lite",
+      "split": "dev"
+    },
+    {
+      "id": "sympy__sympy-12481",
+      "benchmark": "swe",
+      "repository": "sympy/sympy",
+      "commit": "c807dfe7569692cad24f02a08477b70c1679a4dd",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": null,
+      "difficulty_source": "not labeled by Lite",
+      "split": "dev"
+    },
+    {
+      "id": "sympy__sympy-14317",
+      "benchmark": "swe",
+      "repository": "sympy/sympy",
+      "commit": "fb536869fb7aa28b2695ad7a3b70949926b291c4",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": null,
+      "difficulty_source": "not labeled by Lite",
+      "split": "dev"
+    },
+    {
+      "id": "sympy__sympy-15345",
+      "benchmark": "swe",
+      "repository": "sympy/sympy",
+      "commit": "9ef28fba5b4d6d0168237c9c005a550e6dc27d81",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": null,
+      "difficulty_source": "not labeled by Lite",
+      "split": "dev"
+    },
+    {
+      "id": "sympy__sympy-17655",
+      "benchmark": "swe",
+      "repository": "sympy/sympy",
+      "commit": "f5e965947af2410ded92cfad987aaf45262ea434",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": null,
+      "difficulty_source": "not labeled by Lite",
+      "split": "dev"
+    },
+    {
+      "id": "sympy__sympy-18189",
+      "benchmark": "swe",
+      "repository": "sympy/sympy",
+      "commit": "1923822ddf8265199dbd9ef9ce09641d3fd042b9",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": null,
+      "difficulty_source": "not labeled by Lite",
+      "split": "dev"
+    },
+    {
+      "id": "django__django-14017",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "django/django",
+      "commit": "466920f6d726eee90d5566e0a9948e92b33a122e",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "small",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "django-runtests"
+    },
+    {
+      "id": "django__django-15851",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "django/django",
+      "commit": "b4817d20b9e55df30be0b1b2ca8c8bb6d61aab07",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "small",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "django-runtests"
+    },
+    {
+      "id": "django__django-15400",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "django/django",
+      "commit": "4c76ffc2d6c77c850b4bef8d9acc197d11c47937",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "django-runtests"
+    },
+    {
+      "id": "django__django-12856",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "django/django",
+      "commit": "8328811f048fed0dd22573224def8c65410c9f2e",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "django-runtests"
+    },
+    {
+      "id": "django__django-14155",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "django/django",
+      "commit": "2f13c476abe4ba787b6cb71131818341911f43cc",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "django-runtests"
+    },
+    {
+      "id": "django__django-13401",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "django/django",
+      "commit": "453967477e3ddae704cd739eac2449c0e13d464c",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "django-runtests"
+    },
+    {
+      "id": "django__django-13321",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "django/django",
+      "commit": "35b03788b0607c1f8d2b64e4fa9e1669b0907ea4",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "django-runtests"
+    },
+    {
+      "id": "scikit-learn__scikit-learn-15535",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "scikit-learn/scikit-learn",
+      "commit": "70b0ddea992c01df1a41588fa9e2d130fb6b13f8",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "small",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "scikit-learn__scikit-learn-13439",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "scikit-learn/scikit-learn",
+      "commit": "a62775e99f2a5ea3d51db7160fad783f6cd8a4c5",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "scikit-learn__scikit-learn-15512",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "scikit-learn/scikit-learn",
+      "commit": "b8a4da8baa1137f173e7035f104067c7d2ffde22",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "scikit-learn__scikit-learn-11040",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "scikit-learn/scikit-learn",
+      "commit": "96a02f3934952d486589dddd3f00b40d5a5ab5f2",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "scikit-learn__scikit-learn-14894",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "scikit-learn/scikit-learn",
+      "commit": "fdbaa58acbead5a254f2e6d597dc1ab3b947f4c6",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "pytest-dev__pytest-11148",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "pytest-dev/pytest",
+      "commit": "2f7415cfbc4b6ca62f9013f1abd27136f46b9653",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "small",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "pytest-dev__pytest-5692",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "pytest-dev/pytest",
+      "commit": "29e336bd9bf87eaef8e2683196ee1975f1ad4088",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "pytest-dev__pytest-8365",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "pytest-dev/pytest",
+      "commit": "4964b468c83c06971eb743fbc57cc404f760c573",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "pytest-dev__pytest-5103",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "pytest-dev/pytest",
+      "commit": "10ca84ffc56c2dd2d9dc4bd71b7b898e083500cd",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "pytest-dev__pytest-5495",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "pytest-dev/pytest",
+      "commit": "1aefb24b37c30fba8fd79a744829ca16e252f340",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "psf__requests-2674",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "psf/requests",
+      "commit": "0be38a0c37c59c4b66ce908731da15b401655113",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "small",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "psf__requests-2148",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "psf/requests",
+      "commit": "fe693c492242ae532211e0c173324f09ca8cf227",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "psf__requests-3362",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "psf/requests",
+      "commit": "36453b95b13079296776d11b09cab2567ea3e703",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "psf__requests-863",
+      "split": "heldout",
+      "benchmark": "swe",
+      "repository": "psf/requests",
+      "commit": "a0df2cbb10419037d11d04352b3175405ab52941",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "repository-relative reference patch size tertile",
+      "runner": "pytest"
+    },
+    {
+      "id": "raman-fitting",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "scientific-computing",
+      "sampling_group": "data-and-scripting",
+      "upstream_tags": [
+        "coding",
+        "fitting",
+        "analysis",
+        "physics"
+      ],
+      "verified_asset_files": 7
+    },
+    {
+      "id": "bn-fit-modify",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "hard",
+      "difficulty_source": "upstream task.toml",
+      "category": "scientific-computing",
+      "sampling_group": "data-and-scripting",
+      "upstream_tags": [
+        "bayesian-network",
+        "stats"
+      ],
+      "verified_asset_files": 6
+    },
+    {
+      "id": "modernize-scientific-stack",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "scientific-computing",
+      "sampling_group": "data-and-scripting",
+      "upstream_tags": [
+        "python-migration",
+        "scientific-computing",
+        "legacy-modernization",
+        "climate-science",
+        "data-processing"
+      ],
+      "verified_asset_files": 11
+    },
+    {
+      "id": "build-pmars",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering",
+      "sampling_group": "compilation-and-build",
+      "upstream_tags": [
+        "build-tools",
+        "compilation",
+        "debian",
+        "gaming",
+        "pmars",
+        "corewars"
+      ],
+      "verified_asset_files": 8
+    },
+    {
+      "id": "sqlite-with-gcov",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "system-administration",
+      "sampling_group": "compilation-and-build",
+      "upstream_tags": [
+        "software-installation",
+        "system"
+      ],
+      "verified_asset_files": 8
+    },
+    {
+      "id": "overfull-hbox",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "easy",
+      "difficulty_source": "upstream task.toml",
+      "category": "debugging",
+      "sampling_group": "compilation-and-build",
+      "upstream_tags": [
+        "latex",
+        "document-processing",
+        "combinatorial-optimization"
+      ],
+      "verified_asset_files": 13
+    },
+    {
+      "id": "sqlite-db-truncate",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "debugging",
+      "sampling_group": "debugging-and-environment",
+      "upstream_tags": [
+        "file-operations"
+      ],
+      "verified_asset_files": 7
+    },
+    {
+      "id": "build-cython-ext",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "debugging",
+      "sampling_group": "debugging-and-environment",
+      "upstream_tags": [
+        "coding",
+        "dependency",
+        "compilation"
+      ],
+      "verified_asset_files": 6
+    },
+    {
+      "id": "schemelike-metacircular-eval",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering",
+      "sampling_group": "debugging-and-environment",
+      "upstream_tags": [
+        "software-engineering"
+      ],
+      "verified_asset_files": 137
+    },
+    {
+      "id": "fix-git",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "easy",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering",
+      "sampling_group": "git-and-file-operations",
+      "upstream_tags": [
+        "coding",
+        "version-control"
+      ],
+      "verified_asset_files": 9
+    },
+    {
+      "id": "large-scale-text-editing",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "file-operations",
+      "sampling_group": "git-and-file-operations",
+      "upstream_tags": [
+        "text-editing",
+        "large-scale-text-manipulation",
+        "vim",
+        "vim-macros"
+      ],
+      "verified_asset_files": 10
+    },
+    {
+      "id": "write-compressor",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "hard",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering",
+      "sampling_group": "git-and-file-operations",
+      "upstream_tags": [
+        "coding"
+      ],
+      "verified_asset_files": 11
+    },
+    {
+      "id": "query-optimize",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "data-science",
+      "sampling_group": "algorithm-optimization",
+      "upstream_tags": [
+        "query-optimization",
+        "sql-query"
+      ],
+      "verified_asset_files": 8
+    },
+    {
+      "id": "largest-eigenval",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "mathematics",
+      "sampling_group": "algorithm-optimization",
+      "upstream_tags": [
+        "coding",
+        "optimization",
+        "constraint",
+        "numerical-approximation"
+      ],
+      "verified_asset_files": 8
+    },
+    {
+      "id": "portfolio-optimization",
+      "split": "heldout",
+      "benchmark": "terminal",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "optimization",
+      "sampling_group": "algorithm-optimization",
+      "upstream_tags": [
+        "c-programming",
+        "python-extension",
+        "optimization"
+      ],
+      "verified_asset_files": 13
+    },
+    {
+      "id": "django__django-13964",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "django/django",
+      "commit": "f39634ff229887bf7790c069d0c411b38494ca38",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "small",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "4.0"
+    },
+    {
+      "id": "django__django-15738",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "django/django",
+      "commit": "6f73eb9d90cfec684529aab48d517e3d6449ba8c",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "4.2"
+    },
+    {
+      "id": "django__django-13220",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "django/django",
+      "commit": "16218c20606d8cd89c5393970c83da04598a3e04",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "3.2"
+    },
+    {
+      "id": "django__django-13447",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "django/django",
+      "commit": "0456d3e42795481a186db05719300691fe2a1029",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "small",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "4.0"
+    },
+    {
+      "id": "django__django-13028",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "django/django",
+      "commit": "78ad4b4b0201003792bfdbf1a7781cbc9ee03539",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "3.2"
+    },
+    {
+      "id": "pytest-dev__pytest-7168",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "pytest-dev/pytest",
+      "commit": "4787fd64a4ca0dba5528b5651bddd254102fe9f3",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "small",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "5.4"
+    },
+    {
+      "id": "pytest-dev__pytest-8906",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "pytest-dev/pytest",
+      "commit": "69356d20cfee9a81972dcbf93d8caf9eabe113e8",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "7.0"
+    },
+    {
+      "id": "pytest-dev__pytest-7220",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "pytest-dev/pytest",
+      "commit": "56bf819c2f4eaf8b36bd8c42c06bb59d5a3bfc0f",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "5.4"
+    },
+    {
+      "id": "pytest-dev__pytest-11143",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "pytest-dev/pytest",
+      "commit": "6995257cf470d2143ad1683824962de4071c0eb7",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "small",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "8.0"
+    },
+    {
+      "id": "scikit-learn__scikit-learn-13779",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "scikit-learn/scikit-learn",
+      "commit": "b34751b7ed02b2cfcc36037fb729d4360480a299",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "small",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "0.22"
+    },
+    {
+      "id": "scikit-learn__scikit-learn-14983",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "scikit-learn/scikit-learn",
+      "commit": "06632c0d185128a53c57ccc73b25b6408e90bb89",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "0.22"
+    },
+    {
+      "id": "scikit-learn__scikit-learn-14092",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "scikit-learn/scikit-learn",
+      "commit": "df7dd8391148a873d157328a4f0328528a0c4ed9",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "0.22"
+    },
+    {
+      "id": "sphinx-doc__sphinx-10325",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "sphinx-doc/sphinx",
+      "commit": "7bdc11e87c7d86dcc2a087eccb7a7c129a473415",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "medium",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "5.0"
+    },
+    {
+      "id": "sphinx-doc__sphinx-10451",
+      "benchmark": "swe",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "sphinx-doc/sphinx",
+      "commit": "195e911f1dab04b8ddeacbe04b7d214aaf81bb0b",
+      "dataset_revision": "6ec7bb89b9342f664a54a6e0a6ea6501d3437cc2",
+      "difficulty": "large",
+      "difficulty_source": "relative patch-size tertile in eligible repository subset",
+      "source_version": "5.1"
+    },
+    {
+      "id": "circuit-fibsqrt",
+      "benchmark": "terminal",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "hard",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering"
+    },
+    {
+      "id": "cobol-modernization",
+      "benchmark": "terminal",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "easy",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering"
+    },
+    {
+      "id": "distribution-search",
+      "benchmark": "terminal",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "machine-learning"
+    },
+    {
+      "id": "headless-terminal",
+      "benchmark": "terminal",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering"
+    },
+    {
+      "id": "polyglot-c-py",
+      "benchmark": "terminal",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering"
+    },
+    {
+      "id": "prove-plus-comm",
+      "benchmark": "terminal",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "easy",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering"
+    },
+    {
+      "id": "sparql-university",
+      "benchmark": "terminal",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "hard",
+      "difficulty_source": "upstream task.toml",
+      "category": "data-querying"
+    },
+    {
+      "id": "winning-avg-corewars",
+      "benchmark": "terminal",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering"
+    },
+    {
+      "id": "kv-store-grpc",
+      "benchmark": "terminal",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "software-engineering"
+    },
+    {
+      "id": "tune-mjcf",
+      "benchmark": "terminal",
+      "split": "heldout",
+      "cohort": "extension",
+      "repository": "harbor-framework/terminal-bench-2-1",
+      "commit": "12b7565679ce5006230b820666353673a133db93",
+      "dataset_revision": "12b7565679ce5006230b820666353673a133db93",
+      "difficulty": "medium",
+      "difficulty_source": "upstream task.toml",
+      "category": "scientific-computing"
+    }
+  ],
+  "extension": {
+    "planned": 24,
+    "assignment": "Fixed new candidates before A/B. Grading gate is reference pass and unchanged-base fail.",
+    "swe_selection": "Seeded by task ID inside repository-relative patch-size tertiles.",
+    "terminal_selection": "Text-only range covering coding, build, data and performance tasks."
+  },
+  "replay": {
+    "seed": "miniclaw-replay-v2",
+    "assignment": "Four previously scored cases per benchmark, selected independently of pass results by seeded SHA-256.",
+    "cases": [
+      "django__django-13321",
+      "pytest-dev__pytest-11148",
+      "pytest-dev__pytest-5103",
+      "django__django-14155",
+      "write-compressor",
+      "largest-eigenval",
+      "modernize-scientific-stack",
+      "sqlite-with-gcov"
+    ]
+  }
+}

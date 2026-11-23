@@ -211,6 +211,15 @@ bash scripts/smoke_offline.sh                                # 完整离线验�
 CI 在 Linux 和 macOS 上跑 lint、测试、离线验收，并从构建出的 wheel 做一次干净安装
 验证——全程不需要 API Key，不产生模型费用。
 
+## Held-out 评测
+
+在 57 道完成配对评分的 SWE-bench Lite 与 Terminal-Bench 2.1 题目上，
+使用 `deepseek-v4.1-flash`，历史版通过 20 道，`budget-verification` 版通过 33 道，
+通过率从 35.1% 升至 57.9%。两版使用各自的上下文、模型轮次与工具调用预算，
+每题时限均为 360 秒。另有 8 道旧题复跑，两版均为 0/8，16 次运行中有 14 次超时。
+题单还包含 18 道 Dev 回归题和 3 道未完成环境校验的 Held-out 题。
+见[固定题单](docs/benchmarks/eval_manifest_v2.json)和[配对结果](docs/benchmarks/heldout_ab_results_v2.json)。
+
 ## 当前服务器环境
 
 ```bash
