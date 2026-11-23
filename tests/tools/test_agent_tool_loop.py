@@ -8,6 +8,7 @@ from miniclaw.core.messages import (
     ToolResultContent,
 )
 from miniclaw.model.scripted import ScriptedModel
+from miniclaw.sessions.types import Checkpoint
 from miniclaw.tools.registry import ToolRegistry
 from miniclaw.tools.types import RegisteredTool, ToolCapabilities, ToolSpec
 
@@ -63,3 +64,34 @@ async def test_agent_executes_tool_once_and_continues() -> None:
         for message in second_request.messages
         for item in message.content
     )
+
+
+async def test_each_tool_result_is_checkpointed_before_next_dispatch() -> None:
+    saved: list[Checkpoint] = []
+
+    class CheckpointRecorder:
+        async def save(self, checkpoint: Checkpoint) -> None:
+            saved.append(checkpoint)
+
+    async def first(_arguments, _context) -> str:
+        return "first result"
+
+    async def second(_arguments, _context) -> str:
+        assert saved[-1].completed_tool_executions == ("call-1",)
+        assert saved[-1].messages[-1].content == (ToolResultContent("call-1", "first result"),)
+        return "second result"
+
+    registry = ToolRegistry()
+    for name, handler in (("first", first), ("second", second)):
+        registry.register(RegisteredTool(
+            ToolSpec(name, name, {"type": "object"}, ToolCapabilities()), handler,
+        ))
+    provider = ScriptedModel((
+        (ToolCallDelta(0, "call-1", "first", "{}"), ToolCallDelta(1, "call-2", "second", "{}"),
+         ResponseCompleted("tool_calls")),
+        (TextDelta("done"), ResponseCompleted("stop")),
+    ))
+    result = await AgentLoop(provider, "fake", tools=registry, checkpoint_store=CheckpointRecorder()).run("run both")
+
+    assert result.status is RunStatus.COMPLETED
+    assert saved[-1].completed_tool_executions == ("call-1", "call-2")

@@ -204,7 +204,7 @@ def decode_checkpoint(payload: Mapping[str, object]) -> Checkpoint:
 
 
 def _event_payload_types() -> dict[str, type]:
-    from miniclaw.agent.loop import (
+    from miniclaw.agent.events import (
         ApprovalRequested,
         ApprovalResolved,
         ArtifactsReady,

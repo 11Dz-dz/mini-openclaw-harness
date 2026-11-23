@@ -1,4 +1,4 @@
-from miniclaw.agent.loop import (
+from miniclaw.agent.events import (
     ApprovalRequested,
     ApprovalResolved,
     ArtifactsReady,

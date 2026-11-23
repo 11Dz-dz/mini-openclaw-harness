@@ -54,21 +54,19 @@ ALLOW / ASK / DENY。只读检查类工具自动放行，写入和网络访问�
 ## 架构
 
 ```text
-terminal input
+终端输入
   └─ AppRepl.process
-      ├─ CommandRouter ──────────────── 斜杠命令（本地处理，不发给模型）
-      └─ MiniClawApp.run_prompt
-          └─ AgentLoop.run              显式状态机，非法状态转移直接报错
-              ├─ ContextBuilder         确定性预算裁剪 + Skill/Memory 注入
-              ├─ ModelProvider.stream   手写 SSE 解码
-              ├─ PermissionPolicy       能力声明 → ALLOW/ASK/DENY
-              ├─ ToolExecutor
-              │   ├─ 文件 / Shell / Git / 网页 / MCP
-              │   ├─ Memory / Plan / Scheduler
-              │   └─ Subagent ────────── 独立 Child AgentLoop，工具白名单取交集
-              ├─ SandboxRouter          Process 或 Docker 后端
+      ├─ cli/app_commands.py              本地处理斜杠命令
+      └─ MiniClawApp.run_prompt           提交任务并维护会话状态
+          └─ AgentLoop.run               控制状态转换和检查点写入顺序
+              ├─ agent/request_context.py 组装请求、裁剪历史、注入上下文
+              ├─ agent/stream.py          接收模型流并组装工具调用片段
+              ├─ agent/tool_batch.py      校验、审批、逐个执行工具
               └─ Session / Checkpoint / Event Store / Trace
 ```
+
+`app.py` 负责组装应用及工具。`config_store.py` 负责安全读写配置，TOML 编解码由
+`config_toml.py` 处理。
 
 ## 安装
 
@@ -220,18 +218,16 @@ CI 在 Linux 和 macOS 上跑 lint、测试、离线验收，并从构建出的 
 题单还包含 18 道 Dev 回归题和 3 道未完成环境校验的 Held-out 题。
 见[固定题单](docs/benchmarks/eval_manifest_v2.json)和[配对结果](docs/benchmarks/heldout_ab_results_v2.json)。
 
-## 当前服务器环境
+## 运行环境与沙箱
 
 ```bash
-source /opt/conda/etc/profile.d/conda.sh
-conda activate harness
-cd /root/rivermind-data/mini-openclaw-harness
-python -m pytest -q
-python examples/full_agent_flow.py --fake
+docker version
+uv run pytest -q
+uv run python examples/full_agent_flow.py --fake
 ```
 
-该服务器本身是容器，没有可用的 Docker CLI/daemon，采用 restricted 模式。
-文件、计划、记忆和受控网页抓取可用，Shell/Git/MCP 进程执行不可用。
+自动模式会检查 Docker daemon 和已配置的镜像。满足隔离要求时启用 Docker 沙箱，
+否则进入 `restricted` 模式。启动后用 `/sandbox` 查看选中的后端和被禁用的工具。
 `data_dir` 与项目目录必须互不包含；不要把运行数据目录设置在项目内部。
 工作副本复制跳过 `.venv`、`node_modules` 和缓存目录，上限为 20,000 文件、512 MiB 总量、
 64 MiB 单文件、64 层目录。超限会明确拒绝。单次 `read_file` 限制为 1 MiB。

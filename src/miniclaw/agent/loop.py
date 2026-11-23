@@ -8,45 +8,66 @@ from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
+from miniclaw.agent.events import (
+    ApprovalRequested as ApprovalRequested,
+)
+from miniclaw.agent.events import (
+    ApprovalResolved as ApprovalResolved,
+)
+from miniclaw.agent.events import (
+    ArtifactsReady,
+    CompletionChecked,
+    ContextBuilt,
+    ContextInjected,
+    ModelStreamStarted,
+    ReasoningRecovery,
+    RunCancelled,
+    RunCompleted,
+    RunEnded,
+    RunFailed,
+    RunStarted,
+    VerificationStalled,
+    WorkspaceVerified,
+)
+from miniclaw.agent.events import (
+    ModelResponseFinished as ModelResponseFinished,
+)
+from miniclaw.agent.events import (
+    ModelUsage as ModelUsage,
+)
 from miniclaw.agent.limits import RunLimits
+from miniclaw.agent.request_context import build_request_context
 from miniclaw.agent.state import RunStatus, transition
+from miniclaw.agent.stream import receive_model_turn
+from miniclaw.agent.tool_batch import execute_tool_batch, prepare_tool_batch
 from miniclaw.context.builder import ContextBuilder
-from miniclaw.context.history import compact_dropped_history, select_request_history
 from miniclaw.context.types import (
     AgentContext,
     ContextBudget,
     ContextBudgetExceeded,
     ContextSource,
 )
-from miniclaw.core.errors import ToolArgumentsInvalid, ToolNotFound
+from miniclaw.core.errors import ToolArgumentsInvalid
 from miniclaw.core.events import EventEnvelope
 from miniclaw.core.messages import (
     Message,
     ModelRequest,
-    ReasoningDelta,
-    ResponseCompleted,
     TextContent,
-    TextDelta,
     ToolCall,
-    ToolCallDelta,
-    ToolResultContent,
 )
 from miniclaw.model.base import ModelProvider
-from miniclaw.model.encoding import encode_message, encode_request
 from miniclaw.observability.trace import TraceSink
 from miniclaw.permissions.approval import InMemoryApprovalProvider
 from miniclaw.permissions.policy import DefaultPermissionPolicy
-from miniclaw.permissions.preview import arguments_preview, canonical_arguments
-from miniclaw.permissions.types import PermissionDecision, PermissionRequest
+from miniclaw.permissions.preview import canonical_arguments
 from miniclaw.sessions.checkpoints import FileCheckpointStore
 from miniclaw.sessions.database import SessionRepository
 from miniclaw.sessions.events import JsonlEventStore
 from miniclaw.sessions.recovery import close_interrupted_tool_calls
 from miniclaw.sessions.types import Checkpoint, RunRecord, SessionRecord
 from miniclaw.tools.assembler import ToolCallAssembler
-from miniclaw.tools.executor import ToolExecutor, argument_error_result
+from miniclaw.tools.executor import ToolExecutor
 from miniclaw.tools.registry import ToolRegistry
-from miniclaw.tools.schema import validate_arguments
 from miniclaw.tools.types import RegisteredTool, ToolCapabilities, ToolContext, ToolSpec
 from miniclaw.workspace.paths import WorkspaceEscape, resolve_workspace_path
 
@@ -100,109 +121,10 @@ ARTIFACTS_READY_FEEDBACK = ContextSource(
 )
 
 
-@dataclass(frozen=True, slots=True)
-class RunStarted:
-    prompt: str
-
-
-@dataclass(frozen=True, slots=True)
-class ContextBuilt:
-    message_count: int
-    estimated_tokens: int | None = None
-    dropped_source_ids: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class ModelStreamStarted:
-    turn: int
-
-
-@dataclass(frozen=True, slots=True)
-class ModelResponseFinished:
-    turn: int
-    reason: str
-    reasoning_tokens: int | None
-    reasoning_chars: int
-    visible_chars: int
-    tool_fragments: int
-
-
-@dataclass(frozen=True, slots=True)
-class ArtifactsReady:
-    turn: int
-
-
-@dataclass(frozen=True, slots=True)
-class ReasoningRecovery:
-    turn: int
-    recovered: bool
-
-
-@dataclass(frozen=True, slots=True)
-class RunCompleted:
-    output: str
-
-
-@dataclass(frozen=True, slots=True)
-class CompletionChecked:
-    passed: bool
-
-
-@dataclass(frozen=True, slots=True)
-class WorkspaceVerified:
-    passed: bool
-
-
-@dataclass(frozen=True, slots=True)
-class VerificationStalled:
-    consecutive_checks: int
-
-
-@dataclass(frozen=True, slots=True)
-class RunCancelled:
-    reason: str = "cancelled"
-
-
-@dataclass(frozen=True, slots=True)
-class RunFailed:
-    reason: str
-
-
-@dataclass(frozen=True, slots=True)
-class RunEnded:
-    status: str
-
-
-@dataclass(frozen=True, slots=True)
-class ModelUsage:
-    input_tokens: int
-    output_tokens: int
-
-
-@dataclass(frozen=True, slots=True)
-class ApprovalRequested:
-    request_id: str
-    tool_call_id: str
-    tool_name: str
-    reason: str
-
-
-@dataclass(frozen=True, slots=True)
-class ApprovalResolved:
-    request_id: str
-    approved: bool
-    reason: str
-
-
 class ContextProvider(Protocol):
     """Contribute extra context sources for one run, e.g. skills or memory."""
 
     async def build(self, prompt: str) -> tuple[ContextSource, ...]: ...
-
-
-@dataclass(frozen=True, slots=True)
-class ContextInjected:
-    source_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,6 +222,11 @@ class AgentLoop:
         completed_tool_executions: list[str] = []
         context_snapshot: AgentContext | None = None
         terminal_emitted = False
+
+        def begin_approval() -> None:
+            nonlocal status
+            if status is RunStatus.VALIDATING_TOOLS:
+                status = transition(status, RunStatus.AWAITING_APPROVAL)
 
         async def emit(payload: object) -> None:
             envelope = EventEnvelope.create(
@@ -488,75 +415,23 @@ class AgentLoop:
                 if feedback_message is not None:
                     round_sources = (*round_sources, ContextSource(
                         "harness:feedback-tail", feedback_text, priority=100, required=True))
-                selected_extra = round_sources
-                if self.context_builder is not None and self.context_budget is not None:
-                    overhead = self.context_builder.estimator.estimate(json.dumps(
-                        encode_request(ModelRequest(
-                            self.model, (), tools, max_output_tokens=self.context_budget.reserve_output,
-                            tool_choice=tool_choice, enable_thinking=False if thinking_disabled else None), stream=True),
-                        ensure_ascii=False, separators=(",", ":")))
-                    history = request_messages
-                    budget_sources = tuple(replace(source, token_text=json.dumps(encode_message(
-                            feedback_message if source.source_id == "harness:feedback-tail"
-                            else Message("system", (TextContent(source.text),))),
-                            ensure_ascii=False)) for source in round_sources)
-                    context_snapshot, request_messages = select_request_history(
-                        self.context_builder, history, budget_sources,
-                        ContextBudget(self.context_budget.total - overhead,
-                                      self.context_budget.reserve_output),
-                    )
-                    excerpt = compact_dropped_history(
-                        history, set(context_snapshot.dropped_source_ids),
-                        self.context_builder.estimator,
-                        min(2048, self.context_budget.input_limit - overhead
-                            - context_snapshot.estimated_tokens),
-                    )
-                    if excerpt is not None:
-                        encoded = json.dumps(encode_message(Message('system', (TextContent(excerpt.text),))),
-                                             ensure_ascii=False)
-                        excerpt_cost = self.context_builder.estimator.estimate(encoded)
-                        if (context_snapshot.estimated_tokens + excerpt_cost + overhead
-                                <= self.context_budget.input_limit):
-                            context_snapshot = replace(context_snapshot,
-                                items=(*context_snapshot.items, excerpt),
-                                estimated_tokens=context_snapshot.estimated_tokens + excerpt_cost)
-                    context_snapshot = replace(context_snapshot,
-                        estimated_tokens=context_snapshot.estimated_tokens + overhead)
-                    selected_indices = {
-                        int(item.source_id.removeprefix("message:"))
-                        for item in context_snapshot.items
-                        if item.source_id.startswith("message:")
-                    }
-                    selected_extra = tuple(
-                        item
-                        for item in context_snapshot.items
-                        if not item.source_id.startswith("message:")
-                    )
-                    request_messages = tuple(
-                        message
-                        for index, message in enumerate(request_messages)
-                        if index in selected_indices
-                    )
-                head_sources = tuple(item for item in selected_extra if item.source_id != "harness:feedback-tail")
-                if head_sources:
-                    request_messages = (
-                        Message(
-                            "system",
-                            tuple(
-                            TextContent(item.text) for item in head_sources
-                            ),
-                        ),
-                        *request_messages,
-                    )
-                if feedback_message is not None:
-                    request_messages = (*request_messages, feedback_message)
+                request, context_snapshot, head_sources = build_request_context(
+                    ModelRequest(
+                        self.model, request_messages, tools,
+                        max_output_tokens=(self.context_budget.reserve_output
+                                           if self.context_budget else None),
+                        tool_choice=tool_choice,
+                        enable_thinking=False if thinking_disabled else None,
+                    ),
+                    round_sources, feedback_message, self.context_builder, self.context_budget,
+                )
                 injected = tuple(source.source_id for source in head_sources) + tuple(
                     dict.fromkeys(source.source_id for source in feedback))
                 if injected:
                     await emit(ContextInjected(injected))
                 await emit(
                     ContextBuilt(
-                        len(request_messages),
+                        len(request.messages),
                         (
                             context_snapshot.estimated_tokens
                             if context_snapshot is not None
@@ -574,56 +449,17 @@ class AgentLoop:
                 await emit(ModelStreamStarted(turn))
                 if recovery_tools:
                     await emit(ReasoningRecovery(turn, recovered=False))
-                answer: list[str] = []
-                reasoning: list[str] = []
                 assembler = ToolCallAssembler()
-                assembly_error: ToolArgumentsInvalid | None = None
-                finish_reason: str | None = None
-                reasoning_tokens: int | None = None
-                tool_fragments = 0
-                pending_tool_names: set[str] = set()
                 available_tool_names = {spec["function"]["name"] for spec in tools}
-                async for event in self.provider.stream(
-                    ModelRequest(
-                        self.model,
-                        request_messages,
-                        tools,
-                        max_output_tokens=(self.context_budget.reserve_output
-                                           if self.context_budget else None),
-                        tool_choice=tool_choice,
-                        enable_thinking=False if thinking_disabled else None,
-                    )
-                ):
-                    if isinstance(event, TextDelta):
-                        answer.append(event.text)
-                        await emit(event)
-                    elif isinstance(event, ReasoningDelta):
-                        # Preserve provider state for tool continuation without
-                        # exposing it as an answer or recording it in audit streams.
-                        reasoning.append(event.text)
-                    elif isinstance(event, ToolCallDelta):
-                        tool_fragments += 1
-                        if event.name in available_tool_names:
-                            pending_tool_names.add(event.name)
-                        if assembly_error is None:
-                            try:
-                                assembler.feed(event)
-                            except ToolArgumentsInvalid as error:
-                                assembly_error = error
-                        await emit(event)
-                    elif isinstance(event, ResponseCompleted):
-                        finish_reason = event.finish_reason
-                        if event.usage is not None:
-                            await emit(ModelUsage(event.usage.input_tokens, event.usage.output_tokens))
-                            reasoning_tokens = event.usage.reasoning_tokens
-                        await emit(ModelResponseFinished(
-                            turn, finish_reason if finish_reason in {"stop", "length", "tool_calls", "content_filter"}
-                            else "other", reasoning_tokens,
-                            sum(map(len, reasoning)), sum(map(len, answer)), tool_fragments,
-                        ))
-                        break
+                response = await receive_model_turn(
+                    self.provider, request, assembler, available_tool_names, turn, emit,
+                )
+                finish_reason = response.finish_reason
+                answer = "".join(response.answer)
+                reasoning = "".join(response.reasoning) if response.reasoning else None
                 if self.reasoning_circuit_breaker and not thinking_disabled:
-                    if finish_reason == "length" and not tool_fragments and (reasoning or reasoning_tokens):
+                    if (finish_reason == "length" and not response.tool_fragments
+                            and (response.reasoning or response.reasoning_tokens)):
                         reasoning_spin_streak += 1
                     else:
                         reasoning_spin_streak = 0
@@ -658,9 +494,9 @@ class AgentLoop:
                             )
                             completion_feedback.append(next_feedback)
                     else:
-                        output = "".join(answer)
+                        output = answer
                         messages.append(Message("assistant", (TextContent(output),),
-                                                "".join(reasoning) if reasoning else None))
+                                                reasoning))
                         status = transition(status, RunStatus.COMPLETED)
                         await emit(RunCompleted(output))
                         await checkpoint()
@@ -672,8 +508,8 @@ class AgentLoop:
                     if (turn < self.limits.max_turns
                             and output_truncation_retries < self.limits.max_output_truncation_retries):
                         output_truncation_retries += 1
-                        detail = (" Interrupted tools: " + ", ".join(sorted(pending_tool_names)) + "."
-                                  if pending_tool_names else
+                        detail = (" Interrupted tools: " + ", ".join(sorted(response.pending_tool_names)) + "."
+                                  if response.pending_tool_names else
                                   " No tool started. Make one focused tool call before further analysis.")
                         next_feedback = replace(OUTPUT_TRUNCATION_CORRECTION,
                                                 text=OUTPUT_TRUNCATION_CORRECTION.text + detail)
@@ -688,13 +524,13 @@ class AgentLoop:
                         run_id,
                         session_id,
                         status,
-                        failure_reason if finish_reason in {"length", "stop"} else "".join(answer),
+                        failure_reason if finish_reason in {"length", "stop"} else answer,
                         tuple(messages),
                         tuple(events),
                     )
                 try:
-                    if assembly_error is not None:
-                        raise assembly_error
+                    if response.assembly_error is not None:
+                        raise response.assembly_error
                     calls = tuple(ToolCall(call.id, call.name,
                                   json.loads(canonical_arguments(call.arguments)))
                                   for call in assembler.complete())
@@ -717,95 +553,22 @@ class AgentLoop:
                         run_id,
                         session_id,
                         status,
-                        "".join(answer),
+                        answer,
                         tuple(messages),
                         tuple(events),
                     )
                 status = transition(status, RunStatus.VALIDATING_TOOLS)
-                assistant_content = ((TextContent("".join(answer)),) if answer else ()) + calls
+                assistant_content = ((TextContent(answer),) if response.answer else ()) + calls
                 messages.append(Message("assistant", assistant_content,
-                                        "".join(reasoning) if reasoning else None))
+                                        reasoning))
                 await checkpoint()
-                decisions: list[tuple[ToolCall, ToolResultContent | None]] = []
                 context = ToolContext(
-                    run_id,
-                    session_id,
-                    self.workspace or Path.cwd(),
-                    request_text=prompt,
+                    run_id, session_id, self.workspace or Path.cwd(), request_text=prompt,
                 )
-                for call in calls:
-                    frozen_arguments = canonical_arguments(call.arguments)
-                    frozen_call = ToolCall(call.id, call.name, json.loads(frozen_arguments))
-                    allowed = True
-                    # Approval cannot provide a missing isolation capability.
-                    # ToolExecutor refuses unavailable calls before dispatch.
-                    unavailable = (
-                        registry is not None
-                        and registry.disabled_reason(call.name) is not None
-                    )
-                    registered = None
-                    if registry is not None:
-                        with contextlib.suppress(ToolNotFound):
-                            registered = registry.get(call.name)
-                    if (self.permission_policy is not None and not unavailable
-                            and registered is not None):
-                        try:
-                            validate_arguments(registered.spec.parameters, frozen_call.arguments)
-                        except ToolArgumentsInvalid as error:
-                            decisions.append((frozen_call, argument_error_result(call.id, error)))
-                            continue
-                        evaluation = self.permission_policy.evaluate(
-                            tool_name=call.name,
-                            capabilities=registered.spec.capabilities,
-                            arguments=json.loads(frozen_arguments),
-                        )
-                        if evaluation.decision is PermissionDecision.DENY:
-                            allowed = False
-                        elif evaluation.decision is PermissionDecision.ASK:
-                            if status is RunStatus.VALIDATING_TOOLS:
-                                status = transition(
-                                    status, RunStatus.AWAITING_APPROVAL
-                                )
-                            request_id = str(uuid4())
-                            request = PermissionRequest(
-                                request_id,
-                                run_id,
-                                call.id,
-                                call.name,
-                                arguments_preview(frozen_call.arguments),
-                                registered.spec.capabilities,
-                                evaluation.reason,
-                            )
-                            await emit(
-                                ApprovalRequested(
-                                    request_id,
-                                    call.id,
-                                    call.name,
-                                    evaluation.reason,
-                                )
-                            )
-                            if self.approval_provider is None:
-                                allowed = False
-                                resolution_reason = "approval provider unavailable"
-                            else:
-                                resolution = await self.approval_provider.resolve(
-                                    request
-                                )
-                                allowed = (resolution.request_id == request_id
-                                           and resolution.approved)
-                                resolution_reason = resolution.reason
-                            await emit(
-                                ApprovalResolved(
-                                    request_id,
-                                    allowed,
-                                    resolution_reason,
-                                )
-                            )
-                    # Execute the exact reviewed snapshot, even if another
-                    # object retained a reference to the mutable arguments.
-                    rejection = None if allowed else ToolResultContent(
-                        call.id, "permission denied", is_error=True)
-                    decisions.append((frozen_call, rejection))
+                decisions = await prepare_tool_batch(
+                    calls, registry, self.permission_policy, self.approval_provider,
+                    run_id, begin_approval, emit,
+                )
                 any_allowed = any(rejection is None for _, rejection in decisions)
                 target = (
                     RunStatus.EXECUTING_TOOLS
@@ -814,8 +577,7 @@ class AgentLoop:
                 )
                 status = transition(status, target)
                 recovered = False
-                for call, rejection in decisions:
-                    result = rejection if rejection is not None else await executor.execute(call, context)
+                async for call, result in execute_tool_batch(decisions, executor, context):
                     tool_calls_used += 1
                     # Persist each outcome before dispatching the next tool.
                     messages.append(Message("tool", (result,)))

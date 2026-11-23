@@ -2,7 +2,8 @@ import asyncio
 import tempfile
 from pathlib import Path
 
-from miniclaw.agent.loop import AgentLoop, ApprovalRequested
+from miniclaw.agent.events import ApprovalRequested
+from miniclaw.agent.loop import AgentLoop
 from miniclaw.core.messages import ResponseCompleted, TextDelta, ToolCallDelta
 from miniclaw.evals.assertions import evaluate_assertion
 from miniclaw.evals.loader import _ASSERTIONS, _FAULTS, EvalLoadError
