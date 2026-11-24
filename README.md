@@ -59,7 +59,7 @@ you> /apply path/to/changed_file.py
 | 全部 57 道 | 20/57（35.1%） | 33/57（57.9%） |
 | 本轮新增 24 道 | 7/24（29.2%） | 14/24（58.3%） |
 
-使用同一个 `deepseek-v4.1-flash` 模型，题目来自 SWE-bench Lite 和 Terminal-Bench 2.1。两版使用各自的上下文、模型轮次和工具调用预算。题单、分组结果、超时复跑和实验限制见[评测说明](docs/benchmarks/README.md)。
+使用同一个 `deepseek-v4.1-flash` 模型，题目来自 SWE-bench Lite 和 Terminal-Bench 2.1。题单、分组结果、超时复跑和实验限制见[评测说明](docs/benchmarks/README.md)。
 
 ## 文档与开发
 
